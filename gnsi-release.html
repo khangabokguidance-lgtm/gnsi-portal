@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GNSI — Release Portal Update</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" crossorigin="anonymous"></script>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Segoe UI',DM Sans,sans-serif;background:#0a1229;color:#e2e8f0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+  .card{background:#111827;border:1.5px solid rgba(255,255,255,0.08);border-radius:20px;padding:32px;width:100%;max-width:480px}
+  .card-title{font-size:20px;font-weight:700;color:#fff;margin-bottom:4px}
+  .card-sub{font-size:13px;color:rgba(255,255,255,0.45);margin-bottom:28px}
+  label{display:block;font-size:12px;color:rgba(255,255,255,0.5);margin-bottom:6px;font-family:monospace;letter-spacing:.06em;text-transform:uppercase}
+  input,textarea{width:100%;background:rgba(255,255,255,0.05);border:1.5px solid rgba(255,255,255,0.1);border-radius:10px;padding:11px 14px;font-size:13px;color:#fff;margin-bottom:16px;font-family:'Segoe UI',sans-serif;outline:none;transition:border-color .2s}
+  input:focus,textarea:focus{border-color:rgba(76,110,245,0.6)}
+  textarea{height:80px;resize:none}
+  .btn{width:100%;background:linear-gradient(135deg,#1433a8,#2655d8);color:#fff;border:none;border-radius:12px;padding:14px;font-size:15px;font-weight:700;cursor:pointer;transition:opacity .2s;margin-bottom:12px}
+  .btn:hover{opacity:.85}
+  .btn:disabled{opacity:.4;cursor:not-allowed}
+  .result{border-radius:10px;padding:14px 16px;font-size:13px;line-height:1.6;display:none}
+  .result.ok{background:rgba(22,163,74,0.12);border:1.5px solid rgba(22,163,74,0.35);color:#4ade80}
+  .result.err{background:rgba(220,38,38,0.12);border:1.5px solid rgba(220,38,38,0.35);color:#f87171}
+  .current{background:rgba(255,255,255,0.04);border-radius:10px;padding:12px 14px;margin-bottom:20px;font-size:12px;font-family:monospace;color:rgba(255,255,255,0.4)}
+  .current span{color:#ffd060;font-weight:700}
+  .history{margin-top:16px}
+  .history-title{font-size:11px;color:rgba(255,255,255,0.3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px}
+  .history-item{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid rgba(255,255,255,0.05);font-size:12px;color:rgba(255,255,255,0.5)}
+  .history-ver{color:rgba(255,255,255,0.8);font-family:monospace}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="card-title">🚀 Release Portal Update</div>
+  <div class="card-sub">Push a new version — all staff get notified instantly</div>
+
+  <div class="current" id="current-info">Loading current version…</div>
+
+  <label>New version number</label>
+  <input id="ver-input" placeholder="e.g. v11-2-7" value="v11-2-7">
+
+  <label>Release note (what changed?)</label>
+  <textarea id="note-input" placeholder="e.g. Added roll call cloud sync, fixed fee receipt date"></textarea>
+
+  <button class="btn" id="release-btn" onclick="releaseUpdate()">Push Update to All Staff</button>
+
+  <div class="result" id="result"></div>
+
+  <div class="history" id="history" style="display:none">
+    <div class="history-title">Recent releases</div>
+    <div id="history-list"></div>
+  </div>
+</div>
+
+<script>
+var SUPABASE_URL = 'https://pwrldrngqxbvwfztxxrd.supabase.co';
+var SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB3cmxkcm5ncXhidndmenR4eHJkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ1MTc5NTUsImV4cCI6MjA5MDA5Mzk1NX0.vQi6N4s5Y_iwU1eIi4g8q_T8bW4j8mBH7BFDamAhB0Y';
+
+var sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+/* Load current version on page open */
+async function loadCurrent() {
+  try {
+    var r = await sb.from('gnsi_keyvalue').select('value,updated_at').eq('key','gnsi_portal_version').maybeSingle();
+    var ver = r.data ? String(r.data.value).replace(/^"|"$/g,'') : 'not set';
+    var ts  = r.data ? new Date(r.data.updated_at).toLocaleString('en-IN') : '—';
+    document.getElementById('current-info').innerHTML = 'Current live version: <span>' + ver + '</span> &nbsp;·&nbsp; released ' + ts;
+
+    /* Suggest next version */
+    var parts = ver.replace('v','').split('-');
+    if (parts.length === 3) {
+      parts[2] = String(parseInt(parts[2]) + 1);
+      document.getElementById('ver-input').value = 'v' + parts.join('-');
+    }
+
+    /* Load history */
+    var hr = await sb.from('gnsi_keyvalue').select('value,updated_at').eq('key','gnsi_version_history').maybeSingle();
+    if (hr.data && hr.data.value) {
+      var hist = Array.isArray(hr.data.value) ? hr.data.value : [];
+      if (hist.length > 0) {
+        document.getElementById('history').style.display = 'block';
+        document.getElementById('history-list').innerHTML = hist.slice(-5).reverse().map(function(h) {
+          return '<div class="history-item"><span class="history-ver">' + h.ver + '</span><span>' + (h.note||'') + '</span><span>' + new Date(h.ts).toLocaleDateString('en-IN') + '</span></div>';
+        }).join('');
+      }
+    }
+  } catch(e) {
+    document.getElementById('current-info').textContent = 'Could not load current version';
+  }
+}
+
+async function releaseUpdate() {
+  var ver  = (document.getElementById('ver-input').value || '').trim();
+  var note = (document.getElementById('note-input').value || '').trim();
+  var btn  = document.getElementById('release-btn');
+  var res  = document.getElementById('result');
+
+  if (!ver) { alert('Please enter a version number'); return; }
+
+  btn.disabled = true;
+  btn.textContent = 'Releasing…';
+  res.style.display = 'none';
+
+  try {
+    /* Write version */
+    var r1 = await sb.from('gnsi_keyvalue').upsert({ key:'gnsi_portal_version', value:ver, updated_at:new Date().toISOString() }, { onConflict:'key' });
+    if (r1.error) throw new Error(r1.error.message);
+
+    /* Write release note */
+    if (note) {
+      await sb.from('gnsi_keyvalue').upsert({ key:'gnsi_portal_release_note', value:note, updated_at:new Date().toISOString() }, { onConflict:'key' });
+    }
+
+    /* Append to history */
+    var hr = await sb.from('gnsi_keyvalue').select('value').eq('key','gnsi_version_history').maybeSingle();
+    var hist = (hr.data && Array.isArray(hr.data.value)) ? hr.data.value : [];
+    hist.push({ ver:ver, note:note, ts:new Date().toISOString() });
+    if (hist.length > 20) hist = hist.slice(-20);
+    await sb.from('gnsi_keyvalue').upsert({ key:'gnsi_version_history', value:hist, updated_at:new Date().toISOString() }, { onConflict:'key' });
+
+    res.className = 'result ok';
+    res.innerHTML = '✅ <strong>' + ver + '</strong> released!<br><br>'
+      + 'All staff with open portals will see the update notification within 5 minutes.<br>'
+      + 'Staff who open the portal fresh will also see it until they click Update Now.';
+    res.style.display = 'block';
+
+    loadCurrent();
+
+  } catch(e) {
+    res.className = 'result err';
+    res.innerHTML = '✗ Failed: ' + e.message;
+    res.style.display = 'block';
+  }
+
+  btn.disabled = false;
+  btn.textContent = 'Push Update to All Staff';
+}
+
+loadCurrent();
+</script>
+</body>
+</html>
