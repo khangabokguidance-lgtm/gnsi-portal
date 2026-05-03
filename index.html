@@ -2760,7 +2760,7 @@ function renderClasses(){
               +'<td><select onchange="classMoveStudent('+parseInt(s.id,10)+',this.value)" style="font-size:11.5px;padding:4px 8px;border-radius:6px;border:1.5px solid var(--border);background:var(--surface);color:var(--text)">'
               +classNames2.map(function(cn){return'<option'+(s.cls===cn?' selected':'')+'>'+esc(cn)+'</option>';}).join('')
               +'</select></td>'
-              +'<td><button onclick="stuEditId='+parseInt(s.id,10)+';showAddStudent=true;activePage=\'students\';render()" style="font-size:11px;padding:3px 8px;border-radius:5px;border:1px solid var(--accent);background:var(--accent-light);cursor:pointer;color:var(--accent);font-weight:700;font-family:\'DM Sans\',sans-serif;margin-right:3px">✏️</button>'
+              +(_isAdminOrArunkumar()?'<td><button onclick="stuEditId='+parseInt(s.id,10)+';showAddStudent=true;activePage=\'students\';render()" style="font-size:11px;padding:3px 8px;border-radius:5px;border:1px solid var(--accent);background:var(--accent-light);cursor:pointer;color:var(--accent);font-weight:700;font-family:\'DM Sans\',sans-serif;margin-right:3px">✏️</button>':'')
               +(canDo('del','students')?'<button onclick="removeStudent('+parseInt(s.id,10)+')" class="btn-danger-sm">🗑</button>':'')+'</td>'
               +'</tr>';
           }).join('');
@@ -2988,7 +2988,7 @@ function renderStudents(){
     +'<option value="Paid"'+(stuFilterFees==='Paid'?' selected':'')+'>Fees: Paid</option>'
     +'<option value="Pending"'+(stuFilterFees==='Pending'?' selected':'')+'>Fees: Pending</option>'
     +'</select>'
-    +'<button class="btn btn-primary" onclick="stuOpenAdd()">+ Enroll Student</button>'
+    +(_isAdminOrArunkumar()?'<button class="btn btn-primary" onclick="stuOpenAdd()">+ Enroll Student</button>':'')
     +'<button class="btn btn-outline" onclick="csvOpenImport()" style="color:var(--accent);border-color:var(--accent)">📥 CSV Import</button>'
     +'<button class="btn btn-outline" onclick="csvExportStudents()" style="color:#16a34a;border-color:#86efac">⬇ Export</button>'
     +(canDo('del','students')?'<button class="btn btn-outline" onclick="deleteAllStudents()" style="color:#dc2626;border-color:#fca5a5">🗑 Delete All</button>':'')
@@ -3091,13 +3091,13 @@ function _renderMobileCards(list){
       +(parent||phone?'<div style="font-size:12px;color:var(--muted);margin-bottom:8px">'+(parent?'👪 '+esc(parent):'')+(phone?' · 📞 '+esc(phone):'')+'</div>':'')
       +'<div class="stu-mob-action-row">'
         +'<button onclick="stuViewId='+parseInt(s.id,10)+';render()" style="background:var(--surface2);color:var(--accent);border:1px solid var(--border)">👁 View</button>'
-        +'<button onclick="stuEditId='+parseInt(s.id,10)+';showAddStudent=true;render()" style="background:var(--accent-light);color:var(--accent);border:1.5px solid var(--accent)">✏ Edit</button>'
+        +(_isAdminOrArunkumar()?'<button onclick="stuEditId='+parseInt(s.id,10)+';showAddStudent=true;render()" style="background:var(--accent-light);color:var(--accent);border:1.5px solid var(--accent)">✏ Edit</button>':'')
         +(canDo('del','students')?'<button onclick="removeStudent('+parseInt(s.id,10)+')" style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;flex:0;padding:8px 12px">🗑</button>':'')
       +'</div>'
     +'</div>';
   }).join('');
 }
-function stuOpenAdd(){ _nstPhotoTemp=null; stuEditId=null; showAddStudent=true; showCsvImport=false; render(); }
+function stuOpenAdd(){ if(!_isAdminOrArunkumar()){showToast('⛔ Only Admin and Manager can enroll students.','#dc2626');return;} _nstPhotoTemp=null; stuEditId=null; showAddStudent=true; showCsvImport=false; render(); }
 function buildStuForm(editId){
   var s = editId ? students.find(function(x){return x.id===editId;}) : null;
   var ex = editId ? stuLoadExtra(editId) : {};
@@ -3636,7 +3636,7 @@ function buildStuProfile(id){
     })()
     +'</div></div>'
     +'<div style="display:flex;gap:8px;flex-direction:column;flex-shrink:0">'
-    +'<button onclick="stuViewId=null;stuEditId='+id+';showAddStudent=true;render()" style="padding:8px 16px;border-radius:9px;border:1.5px solid rgba(255,255,255,.4);background:rgba(255,255,255,.15);color:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:\'DM Sans\',sans-serif">✏️ Edit</button>'
+    +(_isAdminOrArunkumar()?'<button onclick="stuViewId=null;stuEditId='+id+';showAddStudent=true;render()" style="padding:8px 16px;border-radius:9px;border:1.5px solid rgba(255,255,255,.4);background:rgba(255,255,255,.15);color:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:\'DM Sans\',sans-serif">✏️ Edit</button>':'')
     +'<button onclick="stuViewId=null;render()" style="padding:8px 16px;border-radius:9px;border:1.5px solid rgba(255,255,255,.25);background:rgba(255,255,255,.08);color:rgba(255,255,255,.8);font-size:12px;font-weight:700;cursor:pointer;font-family:\'DM Sans\',sans-serif">✕ Close</button>'
     +'</div></div>'
     // Body grid
@@ -3698,7 +3698,7 @@ function buildStuProfile(id){
     +'<div style="padding:14px 22px;background:var(--surface2);border-top:1px solid var(--border-soft);display:flex;align-items:center;gap:10px;flex-wrap:wrap">'
     +'<span style="font-size:11.5px;color:var(--muted)">Student ID: <b>#'+parseInt(s.id,10)+'</b></span>'
     +(_canEditFees()?'<button onclick="toggleFees('+parseInt(s.id,10)+');stuViewId='+parseInt(s.id,10)+';render()" style="font-size:11.5px;padding:5px 13px;border-radius:7px;border:1px solid var(--border);background:'+(s.fees==='Paid'?'#fee2e2':'#dcfce7')+';color:'+(s.fees==='Paid'?'#dc2626':'#16a34a')+';cursor:pointer;font-weight:700;font-family:\'DM Sans\',sans-serif">Toggle Fees → '+(s.fees==='Paid'?'Pending':'Paid')+'</button>':'')
-    +'<button onclick="gnsiOpenStudentFees('+id+')" style="padding:6px 14px;border-radius:8px;border:1.5px solid #16a34a;background:#dcfce7;color:#16a34a;font-size:11.5px;font-weight:700;cursor:pointer;margin-left:8px">💳 Fee History</button>'
+    +(_canEditFees()?'<button onclick="gnsiOpenStudentFees('+id+')" style="padding:6px 14px;border-radius:8px;border:1.5px solid #16a34a;background:#dcfce7;color:#16a34a;font-size:11.5px;font-weight:700;cursor:pointer;margin-left:8px">💳 Fee History</button>':'')
     +'<button onclick="gnsiOpenStudentAdmission('+id+')" style="padding:6px 14px;border-radius:8px;border:1.5px solid #d4a853;background:#fffbeb;color:#92400e;font-size:11.5px;font-weight:700;cursor:pointer;margin-left:8px">📋 Admission</button>'
     +'<span style="margin-left:auto;font-size:11px;color:var(--muted2)">Click outside to close</span>'
     +'</div>'
