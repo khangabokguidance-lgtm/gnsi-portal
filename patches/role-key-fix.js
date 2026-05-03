@@ -18,6 +18,21 @@
   var _lockedRole  = null;
   var _lockedPages = null;
 
+  /* Set locked role IMMEDIATELY from session storage — no async needed */
+  (function _immediateRoleLock() {
+    try {
+      var sess = sessionStorage.getItem('gnsi_session');
+      if (sess) {
+        var parsed = JSON.parse(sess);
+        if (parsed && parsed.role && parsed.role !== 'admin') {
+          _lockedRole = parsed.role;
+          window._gnsiLockedRole = parsed.role;
+          console.log('[GNSI Role Fix] Immediate lock from session:', parsed.role);
+        }
+      }
+    } catch(e) {}
+  })();
+
   /* After login, fetch role_key from Supabase and lock it */
   async function _fetchAndLockRole() {
     if (!currentUser || currentUser.role === 'admin') return;
