@@ -192,3 +192,45 @@
 
   setTimeout(_watchShowAddStudent, 1000);
 })();
+
+/* ── HIDE FEE BUTTONS VIA DOM after render ── */
+function _hideFeeButtons() {
+  var role = window._gnsiLockedRole ||
+             (typeof currentUser !== 'undefined' && currentUser && currentUser.role) || '';
+  var allowed = role === 'admin' || role === 'manager' || role === 'accounts' || role === '';
+  if (allowed) return;
+
+  /* Hide all fee buttons in the DOM */
+  var btns = document.querySelectorAll('.gnsi-fee-btn, button[onclick*="gnsiOpenStudentFees"]');
+  btns.forEach(function(b) { b.style.display = 'none'; });
+
+  /* Also intercept clicks on any remaining fee buttons */
+  document.addEventListener('click', function(e) {
+    var btn = e.target.closest('button');
+    if (!btn) return;
+    if (btn.textContent.includes('Fee') && !btn.textContent.includes('Fees Collected')) {
+      var r = window._gnsiLockedRole ||
+              (typeof currentUser !== 'undefined' && currentUser && currentUser.role) || '';
+      var ok = r === 'admin' || r === 'manager' || r === 'accounts' || r === '';
+      if (!ok) {
+        e.stopImmediatePropagation();
+        e.preventDefault();
+        if (typeof showToast === 'function')
+          showToast('⛔ Fee access is restricted to Accounts staff only.', '#dc2626');
+      }
+    }
+  }, true); /* capture phase — runs before onclick */
+}
+
+/* Run after every render */
+(function _watchRender() {
+  if (typeof render !== 'function') { setTimeout(_watchRender, 500); return; }
+  if (render._feeHidePatched) return;
+  var _orig = render;
+  render = function() {
+    _orig.apply(this, arguments);
+    setTimeout(_hideFeeButtons, 50);
+  };
+  render._feeHidePatched = true;
+  console.log('[GNSI Role Fix] Fee button DOM hider active ✓');
+})();
