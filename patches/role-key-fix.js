@@ -24,9 +24,11 @@
       var sess = sessionStorage.getItem('gnsi_session');
       if (sess) {
         var parsed = JSON.parse(sess);
-        if (parsed && parsed.role && parsed.role !== 'admin') {
+        if (parsed && parsed.role) {
           _lockedRole = parsed.role;
           window._gnsiLockedRole = parsed.role;
+          /* Set data-role on body immediately so CSS can hide fee buttons */
+          document.body && (document.body.dataset.role = parsed.role);
           console.log('[GNSI Role Fix] Immediate lock from session:', parsed.role);
         }
       }
@@ -51,6 +53,7 @@
       var cloudRole = result.data.role_key;
       _lockedRole  = cloudRole;
       window._gnsiLockedRole = cloudRole;  /* used by _canEditFees() immediately */
+      document.body && (document.body.dataset.role = cloudRole);
       _lockedPages = (typeof ROLE_PAGES !== 'undefined' && ROLE_PAGES[cloudRole]) || [];
 
       if (cloudRole !== currentUser.role) {

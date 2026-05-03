@@ -104,6 +104,14 @@
 <script src="modules/social.js"></script>
 <script src="modules/system.js"></script>
 
+
+<style id="gnsi-role-css">
+/* Hide fee buttons by default — shown only for accounts/admin/manager */
+.gnsi-fee-btn { display: none !important; }
+body[data-role="admin"] .gnsi-fee-btn,
+body[data-role="manager"] .gnsi-fee-btn,
+body[data-role="accounts"] .gnsi-fee-btn { display: inline-block !important; }
+</style>
 </head>
 <body>
 
