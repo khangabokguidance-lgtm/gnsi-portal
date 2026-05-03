@@ -1070,7 +1070,7 @@ function buildStuProfile(id){
     +'<div style="padding:14px 22px;background:var(--surface2);border-top:1px solid var(--border-soft);display:flex;align-items:center;gap:10px;flex-wrap:wrap">'
     +'<span style="font-size:11.5px;color:var(--muted)">Student ID: <b>#'+parseInt(s.id,10)+'</b></span>'
     +(_canEditFees()?'<button onclick="toggleFees('+parseInt(s.id,10)+');stuViewId='+parseInt(s.id,10)+';render()" style="font-size:11.5px;padding:5px 13px;border-radius:7px;border:1px solid var(--border);background:'+(s.fees==='Paid'?'#fee2e2':'#dcfce7')+';color:'+(s.fees==='Paid'?'#dc2626':'#16a34a')+';cursor:pointer;font-weight:700;font-family:\'DM Sans\',sans-serif">Toggle Fees → '+(s.fees==='Paid'?'Pending':'Paid')+'</button>':'')
-    +'<button onclick="gnsiOpenStudentFees('+id+')" style="padding:6px 14px;border-radius:8px;border:1.5px solid #16a34a;background:#dcfce7;color:#16a34a;font-size:11.5px;font-weight:700;cursor:pointer;margin-left:8px">💳 Fee History</button>'
+    +(_canEditFees()?'<button onclick="gnsiOpenStudentFees('+id+')" style="padding:6px 14px;border-radius:8px;border:1.5px solid #16a34a;background:#dcfce7;color:#16a34a;font-size:11.5px;font-weight:700;cursor:pointer;margin-left:8px">💳 Fee History</button>':'')
     +'<button onclick="gnsiOpenStudentAdmission('+id+')" style="padding:6px 14px;border-radius:8px;border:1.5px solid #d4a853;background:#fffbeb;color:#92400e;font-size:11.5px;font-weight:700;cursor:pointer;margin-left:8px">📋 Admission</button>'
     +'<span style="margin-left:auto;font-size:11px;color:var(--muted2)">Click outside to close</span>'
     +'</div>'
