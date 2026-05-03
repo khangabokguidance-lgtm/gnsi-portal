@@ -111,3 +111,60 @@
   }
 
 })();
+
+/* ── BLOCK gnsiOpenStudentFees for non-accounts roles ── */
+(function _blockFeeModal() {
+  if (typeof window.gnsiOpenStudentFees !== 'function') {
+    setTimeout(_blockFeeModal, 500);
+    return;
+  }
+  if (window.gnsiOpenStudentFees._feeBlocked) return;
+
+  var _origOpenFees = window.gnsiOpenStudentFees;
+  window.gnsiOpenStudentFees = function (stuId) {
+    var role = (typeof _lockedRole !== 'undefined' && _lockedRole) ||
+               (typeof currentUser !== 'undefined' && currentUser && currentUser.role) || '';
+    var allowed = role === 'admin' || role === 'manager' || role === 'accounts';
+    if (!allowed) {
+      if (typeof showToast === 'function') showToast('⛔ Fee management is restricted to Accounts staff only.', '#dc2626');
+      return;
+    }
+    _origOpenFees(stuId);
+  };
+  window.gnsiOpenStudentFees._feeBlocked = true;
+  console.log('[GNSI Role Fix] gnsiOpenStudentFees blocked for non-accounts ✓');
+})();
+
+/* ── BLOCK student edit/enroll for non-admin/manager roles ── */
+(function _blockStudentEdit() {
+  /* Check permission */
+  function _canEditStudents() {
+    var role = (typeof _lockedRole !== 'undefined' && _lockedRole) ||
+               (typeof currentUser !== 'undefined' && currentUser && currentUser.role) || '';
+    return role === 'admin' || role === 'manager';
+  }
+
+  /* Block showAddStudent from being set to true by non-admins */
+  function _watchShowAddStudent() {
+    var _origRender = typeof render === 'function' ? render : null;
+    if (!_origRender) { setTimeout(_watchShowAddStudent, 500); return; }
+    if (_origRender._editBlocked) return;
+
+    var _patchedRender = function () {
+      /* If someone tried to open the edit/add student form without permission — block it */
+      if (typeof showAddStudent !== 'undefined' && showAddStudent && !_canEditStudents()) {
+        showAddStudent = false;
+        stuEditId = null;
+        if (typeof showToast === 'function') showToast('⛔ Only Admin and Manager can edit student data.', '#dc2626');
+        return;
+      }
+      _origRender.apply(this, arguments);
+    };
+    _patchedRender._editBlocked = true;
+    /* Replace global render */
+    window.render = _patchedRender;
+    console.log('[GNSI Role Fix] Student edit blocked for non-admin/manager ✓');
+  }
+
+  setTimeout(_watchShowAddStudent, 1000);
+})();
