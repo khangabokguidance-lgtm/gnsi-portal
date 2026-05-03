@@ -222,15 +222,22 @@ function _hideFeeButtons() {
   }, true); /* capture phase — runs before onclick */
 }
 
-/* Run after every render */
+/* Run after every render AND continuously */
 (function _watchRender() {
   if (typeof render !== 'function') { setTimeout(_watchRender, 500); return; }
   if (render._feeHidePatched) return;
   var _orig = render;
   render = function() {
     _orig.apply(this, arguments);
-    setTimeout(_hideFeeButtons, 50);
+    setTimeout(_hideFeeButtons, 30);
+    setTimeout(_hideFeeButtons, 200);
   };
   render._feeHidePatched = true;
+
+  /* Also run every 800ms continuously while teacher is logged in */
+  setInterval(_hideFeeButtons, 800);
+
+  /* Run immediately */
+  setTimeout(_hideFeeButtons, 100);
   console.log('[GNSI Role Fix] Fee button DOM hider active ✓');
 })();
