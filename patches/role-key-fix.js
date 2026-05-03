@@ -35,6 +35,7 @@
 
       var cloudRole = result.data.role_key;
       _lockedRole  = cloudRole;
+      window._gnsiLockedRole = cloudRole;  /* used by _canEditFees() immediately */
       _lockedPages = (typeof ROLE_PAGES !== 'undefined' && ROLE_PAGES[cloudRole]) || [];
 
       if (cloudRole !== currentUser.role) {
@@ -96,12 +97,17 @@
     _patchDetectRole();
     _patchCanEditFees();
     _hookLogin();
-    /* Handle session restore (page refresh while logged in) */
+    /* Set locked role immediately from session on page load */
     setTimeout(function () {
       if (typeof currentUser !== 'undefined' && currentUser && currentUser.role !== 'admin') {
+        /* Set immediately from session role so _canEditFees works before Supabase fetch */
+        if (!window._gnsiLockedRole) {
+          window._gnsiLockedRole = currentUser.role;
+          _lockedRole = currentUser.role;
+        }
         _fetchAndLockRole();
       }
-    }, 2000);
+    }, 500);
   }
 
   if (document.readyState === 'loading') {

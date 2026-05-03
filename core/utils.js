@@ -94,7 +94,9 @@ function _canSeeReligion() {
 }
 function _canEditFees() {
   if (!currentUser) return false;
-  return currentUser.role === 'admin' || currentUser.role === 'manager' || currentUser.role === 'accounts';
+  /* Use the locked role from Supabase if available (set by role-key-fix.js) */
+  var role = window._gnsiLockedRole || currentUser.role;
+  return role === 'admin' || role === 'manager' || role === 'accounts';
 }
 
 function maskPhone(ph) {

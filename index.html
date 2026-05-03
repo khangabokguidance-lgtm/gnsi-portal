@@ -25,6 +25,30 @@
      STEP 1: PATCH SCRIPTS — load before everything else
      These intercept localStorage and apply performance fixes.
      ══════════════════════════════════════════════════════════ -->
+<script>
+/* GNSI Early Stubs — prevent "not defined" errors during script loading.
+   Real implementations in core/*.js replace these once loaded. */
+(function(){
+  var noop = function(){};
+  var fns = ['setSyncStatus','showToast','detectRole','canAccess','navigate',
+    'render','buildNav','debouncedRender','loadSession','saveSession','clearSession',
+    '_getSb','gnsiKVPush','gnsiKVPullAll','loadFromSupabase','initApp','pushToSupabase',
+    'fmtDate','numWords','maskPhone','maskAadhar','avatarHTML','badge','searchDebounce',
+    'addSyncLog','autoFbPush','gnsiFinanceInit','setSyncStatus','gnsiStartIdleWatch',
+    'hideLoginScreen','showLoginScreen','doLogout','_gnsiRunPostLoginSync'];
+  fns.forEach(function(f){ if(typeof window[f]==='undefined') window[f]=noop; });
+  /* esc needs a real implementation */
+  if(typeof window.esc==='undefined') window.esc=function(s){
+    return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  };
+  /* detectRole needs a default return */
+  if(typeof window.detectRole==='undefined'||window.detectRole===noop)
+    window.detectRole=function(){ return 'staff'; };
+  /* _getSb needs to return null safely */
+  if(typeof window._getSb==='undefined'||window._getSb===noop)
+    window._getSb=function(){ return window._supa||null; };
+})();
+</script>
 <script src="patches/cloud-proxy.js"></script>
 <script src="patches/performance.js"></script>
 
@@ -50,6 +74,11 @@
 <script src="core/state.js"></script>
 <script src="core/auth.js"></script>
 <script src="core/router.js"></script>
+
+<!-- ══════════════════════════════════════════════════════════
+     STEP 4: CORE — load in this exact order
+     utils → state → auth → router
+     ══════════════════════════════════════════════════════════ -->
 
 <!-- ══════════════════════════════════════════════════════════
      STEP 5: MODULES — one file per feature group
@@ -29656,8 +29685,8 @@ function gnsiRenderStuFeeWidget(stuId){
     +(recent||'<div style="font-size:11.5px;color:var(--muted);text-align:center;padding:8px">No fee collections recorded</div>')
     +'<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">'
     +(canEdit?'<button onclick="gnsiOpenStudentFees('+stuId+')" style="padding:5px 12px;border-radius:7px;border:1.5px solid #16a34a;background:#dcfce7;color:#16a34a;font-size:11px;font-weight:700;cursor:pointer">💳 Collect Fee</button>':'')
-    +'<button onclick="gnsiOpenStudentFees('+stuId+')" style="padding:5px 12px;border-radius:7px;border:1.5px solid var(--border);background:var(--surface2);color:var(--accent);font-size:11px;font-weight:700;cursor:pointer">📜 History</button>'
-    +'<button onclick="gnsiOpenStudentAdmission('+stuId+')" style="padding:5px 12px;border-radius:7px;border:1.5px solid #d4a853;background:#fffbeb;color:#92400e;font-size:11px;font-weight:700;cursor:pointer">📋 Admission</button>'
+    +(canEdit?'<button onclick="gnsiOpenStudentFees('+stuId+')" style="padding:5px 12px;border-radius:7px;border:1.5px solid var(--border);background:var(--surface2);color:var(--accent);font-size:11px;font-weight:700;cursor:pointer">📜 History</button>':'')
+    +(canEdit?'<button onclick="gnsiOpenStudentAdmission('+stuId+')" style="padding:5px 12px;border-radius:7px;border:1.5px solid #d4a853;background:#fffbeb;color:#92400e;font-size:11px;font-weight:700;cursor:pointer">📋 Admission</button>':'')
     +'</div>'
     +'</div>';
 }
