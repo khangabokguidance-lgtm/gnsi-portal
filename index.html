@@ -12218,7 +12218,7 @@ function _fmcSaveCol(asgnId, extra, prefix) {
   }
   /* Post to income ledger */
   try{
-    var inc=loadIncomeLedger();
+    var inc=window._incomeLedgerCache||[];
     inc.push({id:'inc_'+col.id,date:col.payDate||new Date().toISOString().split('T')[0],category:'Fee Collection',description:(col.description||col.forMonth||'Fee')+' -- '+(a.studentName||a.name||''),amount:parseInt(col.amountPaid),receipt:col.receiptNo,source:'FMC',sourceId:col.id,createdAt:new Date().toISOString()});
     saveIncomeLedger(inc);
   }catch(ex){}
@@ -22385,8 +22385,8 @@ function rptTimetableCSV(){
 function rptFeesSection(){
   var admRecs=loadAdmissionRecords();
   var monthRecs=loadMonthlyRecords();
-  var incRecs=loadIncomeLedger();
-  var expRecs=loadExpLedger();
+  var incRecs=window._incomeLedgerCache||[];
+  var expRecs=window._expLedgerCache||[];
   var totalAdm=admRecs.reduce(function(s,r){return s+(r.amountPaid||0);},0);
   var totalMonth=monthRecs.reduce(function(s,r){return s+(r.amountPaid||0);},0);
   var totalInc=incRecs.reduce(function(s,r){return s+(r.amount||0);},0);
@@ -22404,7 +22404,7 @@ function rptFeesSection(){
 }
 function rptFeesPDF(){
   var admRecs=loadAdmissionRecords();var monthRecs=loadMonthlyRecords();
-  var incRecs=loadIncomeLedger();var expRecs=loadExpLedger();
+  var incRecs=window._incomeLedgerCache||[];var expRecs=window._expLedgerCache||[];
   var totalAdm=admRecs.reduce(function(s,r){return s+(r.amountPaid||0);},0);
   var totalMonth=monthRecs.reduce(function(s,r){return s+(r.amountPaid||0);},0);
   var totalInc=incRecs.reduce(function(s,r){return s+(r.amount||0);},0);
@@ -22434,7 +22434,7 @@ function rptFeesPDF(){
 }
 function rptFeesDOC(){
   var admRecs=loadAdmissionRecords();var monthRecs=loadMonthlyRecords();
-  var incRecs=loadIncomeLedger();var expRecs=loadExpLedger();
+  var incRecs=window._incomeLedgerCache||[];var expRecs=window._expLedgerCache||[];
   var totalInc=incRecs.reduce(function(s,r){return s+(r.amount||0);},0);
   var totalExp=expRecs.reduce(function(s,r){return s+(r.amount||0);},0);
   var surplus=totalInc-totalExp;
@@ -22451,7 +22451,7 @@ function rptFeesDOC(){
 }
 function rptFeesExcel(){
   var admRecs=loadAdmissionRecords();var monthRecs=loadMonthlyRecords();
-  var incRecs=loadIncomeLedger();var expRecs=loadExpLedger();
+  var incRecs=window._incomeLedgerCache||[];var expRecs=window._expLedgerCache||[];
   var admRows=[['Date','Student','Course','Amount Paid','Receipt']];
   admRecs.forEach(function(r){admRows.push([r.date||'',r.student||'',r.course||'',r.amountPaid||0,r.receipt||'']);});
   var mthRows=[['Date','Student','Course','Month','Tuition Fee','Hostel Fee','Amount Paid','Receipt']];
@@ -27708,7 +27708,7 @@ var acctTab='income';
    loadFullPaymentRecords, saveFullPaymentRecords are defined in the Supabase finance module. */
 /* -- AUTO-CREDIT TO INCOME -- */
 function autoCreditIncome(amount, desc, date, category, receiptNo, sourceId){
-  var inc=loadIncomeLedger();
+  var inc=window._incomeLedgerCache||[];
   inc.push({id:'inc_'+Date.now()+'_'+Math.random().toString(36).slice(2),
     date:date||new Date().toISOString().split('T')[0],
     category:category||'Fee Collection',
@@ -29039,7 +29039,7 @@ function renderAccounts(){
 }
 /* -- INCOME TAB -- */
 function renderIncomeTab(){
-  var records=loadIncomeLedger();
+  var records=window._incomeLedgerCache||[];
   var INC_CATS=['Monthly Fee','Admission Fee','Full Payment','Advance Fee','Items Provided','Donation','Other'];
   var today=new Date().toISOString().split('T')[0];
   var todayInc=records.filter(function(r){return r.date===today;}).reduce(function(s,r){return s+(r.amount||0);},0);
@@ -29106,7 +29106,7 @@ function feeSaveIncome(){
   if(!desc||!amt){alert('Description and amount required.');return;}
   var blockedCats=['Monthly Fee','Admission Fee','Full Payment','Advance Fee','Items Provided'];
   if(blockedCats.indexOf(cat)!==-1){alert('\u26a0 '+cat+' income must be collected via Fee Management.\nManual entry of fee-type income is not permitted.');return;}
-  var inc=loadIncomeLedger();
+  var inc=window._incomeLedgerCache||[];
   inc.push({id:'inc_'+Date.now(),date:date,category:cat,description:desc,amount:amt,receipt:receipt,source:'manual',createdAt:new Date().toISOString()});
   saveIncomeLedger(inc);feesIncFormOpen=false;render();
 }
@@ -29116,7 +29116,7 @@ function feeDeleteIncome(id){
 }
 function gnsiAdminDeleteIncome(id){
   if(!currentUser||currentUser.role!=='admin'){showToast('🔒 Only admin can delete income records','#dc2626');return;}
-  var records=loadIncomeLedger();
+  var records=window._incomeLedgerCache||[];
   var rec=records.find(function(r){return r.id===id;});
   if(!rec){showToast('Record not found','#d97706');return;}
   var isAuto=rec.source==='auto';
@@ -29171,7 +29171,7 @@ function gnsiExportStaffAttendance(){
 function feeExportIncome(){
   showToast('⏳ Preparing Income CSV…','#2563eb');
 
-  var r=loadIncomeLedger();
+  var r=window._incomeLedgerCache||[];
   var rows=[['Date','Source','Category','Description','Amount','Receipt']];
   r.forEach(function(x){rows.push([x.date||'',x.source||'',x.category||'',x.description||'',x.amount||0,x.receipt||'']);});
     showToast('✅ Income CSV ready — '+(r.length)+' rows','#16a34a');
@@ -29179,7 +29179,7 @@ function feeExportIncome(){
 }
 /* -- EXPENDITURE TAB -- */
 function renderExpenditureTab(){
-  var records=loadExpLedger();
+  var records=window._expLedgerCache||[];
   var EXP_CATS=['Salaries','Utilities (Electricity/Water)','Maintenance & Repair','Stationery & Supplies','Food & Provisions','Transport','Books & Materials','Equipment','Events & Functions','Miscellaneous'];
   var today=new Date().toISOString().split('T')[0];
   var todayExp=records.filter(function(r){return r.date===today;}).reduce(function(s,r){return s+(r.amount||0);},0);
@@ -29247,15 +29247,15 @@ function feeSaveExp(){
   var bill=((document.getElementById('exp-bill')||{}).value||'').trim();
   var approved=((document.getElementById('exp-approved')||{}).value||'').trim();
   if(!desc||!amt){alert('Description and amount required.');return;}
-  var exp=loadExpLedger();
+  var exp=window._expLedgerCache||[];
   exp.push({id:'exp_'+Date.now(),date:date,category:cat,description:desc,amount:amt,vendor:vendor,bill:bill,approvedBy:approved,createdAt:new Date().toISOString()});
   saveExpLedger(exp);feesExpFormOpen=false;render();
 }
-function feeDeleteExp(id){if(!confirm('Delete this expense entry?'))return;var r=loadExpLedger();saveExpLedger(r.filter(function(x){return x.id!==id;}));render();}
+function feeDeleteExp(id){if(!confirm('Delete this expense entry?'))return;var r=window._expLedgerCache||[];saveExpLedger(r.filter(function(x){return x.id!==id;}));render();}
 function feeExportExp(){
   showToast('⏳ Preparing Expense CSV…','#2563eb');
 
-  var r=loadExpLedger();
+  var r=window._expLedgerCache||[];
   var rows=[['Date','Category','Description','Paid To','Amount','Bill No.','Approved By']];
   r.forEach(function(x){rows.push([x.date||'',x.category||'',x.description||'',x.vendor||'',x.amount||0,x.bill||'',x.approvedBy||'']);});
     showToast('✅ Expense CSV ready — '+(r.length)+' rows','#16a34a');
@@ -29269,8 +29269,8 @@ function renderMonthlyReport(){
   var firstOfMonth=today.slice(0,8)+'01';
   var from=acctRptFrom||firstOfMonth;
   var to=acctRptTo||today;
-  var incRecs=loadIncomeLedger().filter(function(r){return r.date>=from&&r.date<=to;});
-  var expRecs=loadExpLedger().filter(function(r){return r.date>=from&&r.date<=to;});
+  var incRecs=window._incomeLedgerCache||[].filter(function(r){return r.date>=from&&r.date<=to;});
+  var expRecs=window._expLedgerCache||[].filter(function(r){return r.date>=from&&r.date<=to;});
   var totalInc=incRecs.reduce(function(s,r){return s+(r.amount||0);},0);
   var totalExp=expRecs.reduce(function(s,r){return s+(r.amount||0);},0);
   var surplus=totalInc-totalExp;
@@ -29322,8 +29322,8 @@ function renderMonthlyReport(){
     +'<tbody>'+(dailyRows||'<tr><td colspan="4" style="padding:24px;text-align:center;color:var(--muted)">No data for selected period</td></tr>')+'</tbody></table></div></div>';
 }
 function printMonthlyReport(from, to){
-  var incRecs=loadIncomeLedger().filter(function(r){return r.date>=from&&r.date<=to;});
-  var expRecs=loadExpLedger().filter(function(r){return r.date>=from&&r.date<=to;});
+  var incRecs=window._incomeLedgerCache||[].filter(function(r){return r.date>=from&&r.date<=to;});
+  var expRecs=window._expLedgerCache||[].filter(function(r){return r.date>=from&&r.date<=to;});
   var totalInc=incRecs.reduce(function(s,r){return s+(r.amount||0);},0);
   var totalExp=expRecs.reduce(function(s,r){return s+(r.amount||0);},0);
   var surplus=totalInc-totalExp;
@@ -29356,8 +29356,8 @@ function printMonthlyReport(from, to){
   w.document.close();
 }
 function exportMonthlyReport(from, to){
-  var incRecs=loadIncomeLedger().filter(function(r){return r.date>=from&&r.date<=to;});
-  var expRecs=loadExpLedger().filter(function(r){return r.date>=from&&r.date<=to;});
+  var incRecs=window._incomeLedgerCache||[].filter(function(r){return r.date>=from&&r.date<=to;});
+  var expRecs=window._expLedgerCache||[].filter(function(r){return r.date>=from&&r.date<=to;});
   var totalInc=incRecs.reduce(function(s,r){return s+(r.amount||0);},0);
   var totalExp=expRecs.reduce(function(s,r){return s+(r.amount||0);},0);
   var rows=[['GNSI Monthly Report: '+from+' to '+to],[''],['INCOME'],['Date','Source','Category','Description','Amount','Receipt']];
@@ -29371,8 +29371,8 @@ function exportMonthlyReport(from, to){
 }
 /* -- BALANCE SHEET -- */
 function renderBalanceSheet(){
-  var incRecs=loadIncomeLedger();
-  var expRecs=loadExpLedger();
+  var incRecs=window._incomeLedgerCache||[];
+  var expRecs=window._expLedgerCache||[];
   var totalInc=incRecs.reduce(function(s,r){return s+(r.amount||0);},0);
   var totalExp=expRecs.reduce(function(s,r){return s+(r.amount||0);},0);
   var surplus=totalInc-totalExp;
@@ -30023,11 +30023,11 @@ function acctAdvDeleteOne(id){
   if(isInc&&(!currentUser||currentUser.role!=='admin')){showToast('🔒 Only admin can delete income records','#dc2626');return;}
   if(!confirm('Permanently delete this '+(isInc?'income':'expenditure')+' record? This cannot be undone.'))return;
   if(isInc){
-    var r=loadIncomeLedger();var rec=r.find(function(x){return x.id===id;});
+    var r=window._incomeLedgerCache||[];var rec=r.find(function(x){return x.id===id;});
     saveIncomeLedger(r.filter(function(x){return x.id!==id;}));
     acctAudit('DELETE INCOME','ID:'+id+(rec?' | ₹'+rec.amount+' | '+rec.description:''));
   } else {
-    var r=loadExpLedger();var rec=r.find(function(x){return x.id===id;});
+    var r=window._expLedgerCache||[];var rec=r.find(function(x){return x.id===id;});
     saveExpLedger(r.filter(function(x){return x.id!==id;}));
     acctAudit('DELETE EXPENSE','ID:'+id+(rec?' | ₹'+rec.amount+' | '+rec.description:''));
   }
@@ -30108,7 +30108,7 @@ function acctResetIncome(){
   if(!confirm('Reset ALL income records? This is irreversible.'))return;
   var conf=prompt('Type RESET INCOME to confirm:');
   if(conf!=='RESET INCOME'){showToast('Cancelled','#d97706');return;}
-  var n=loadIncomeLedger().length;
+  var n=window._incomeLedgerCache||[].length;
   saveIncomeLedger([]);
   gnsiMarkLocalSave(20000); // 20s guard -- allows Supabase async deletes to commit before next fetch
   acctAudit('RESET INCOME',n+' records wiped');
@@ -30118,7 +30118,7 @@ function acctResetExp(){
   if(!confirm('Reset ALL expenditure records? This is irreversible.'))return;
   var conf=prompt('Type RESET EXP to confirm:');
   if(conf!=='RESET EXP'){showToast('Cancelled','#d97706');return;}
-  var n=loadExpLedger().length;
+  var n=window._expLedgerCache||[].length;
   saveExpLedger([]);
   gnsiMarkLocalSave(20000); // 20s guard -- allows Supabase async deletes to commit before next fetch
   acctAudit('RESET EXPENDITURE',n+' records wiped');
@@ -30128,7 +30128,7 @@ function acctFullReset(){
   if(!confirm('⚠️ FULL FINANCIAL RESET -- ALL income, expenditure, and custom categories will be wiped. This is completely irreversible.\n\nAre you absolutely sure?'))return;
   var conf=prompt('Type FULL RESET to confirm:');
   if(conf!=='FULL RESET'){showToast('Cancelled','#d97706');return;}
-  var ni=loadIncomeLedger().length,ne=loadExpLedger().length;
+  var ni=window._incomeLedgerCache||[].length,ne=window._expLedgerCache||[].length;
   saveIncomeLedger([]);saveExpLedger([]);
   gnsiMarkLocalSave(20000); // 20s guard -- allows Supabase async deletes to commit before next fetch
   localStorage.removeItem('gnsi_acct_cats_income');
@@ -30141,7 +30141,7 @@ function feePrintIEReport(){printMonthlyReport(new Date().toISOString().slice(0,
 function feeExportIE(){
   showToast('⏳ Preparing Income-Expense CSV…','#2563eb');
 
-  var incRecs=loadIncomeLedger();var expRecs=loadExpLedger();
+  var incRecs=window._incomeLedgerCache||[];var expRecs=window._expLedgerCache||[];
   var totalIncome=incRecs.reduce(function(s,r){return s+(r.amount||0);},0);
   var totalExp=expRecs.reduce(function(s,r){return s+(r.amount||0);},0);
   var incRows=[['Date','Category','Description','Amount(Income)','Amount(Expenditure)']];
@@ -64237,7 +64237,6 @@ document.addEventListener('change', function(e){
 <script src="patches/students-loader.js"></script>
 <script src="patches/role-key-fix.js"></script>
 
-<script src="modules/accounts.js"></script>
 <script src="modules/fees.js"></script>
 <script src="modules/students.js"></script>
 <script src="modules/admin.js"></script>
