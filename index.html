@@ -64260,13 +64260,24 @@ document.addEventListener('change', function(e){
 <script src="modules/modules_managementchecklist.js"></script>
 <script src="modules/accounts.js"></script>
 <script>
-// Restore sync versions after accounts.js loads
+// Sync overrides + missing helpers
 window.loadIncomeLedger = function(){
   try{ return JSON.parse(localStorage.getItem('gnsi_income_ledger'))||[]; }catch(e){ return []; }
 };
 window.loadExpLedger = function(){
   try{ return JSON.parse(localStorage.getItem('gnsi_exp_ledger'))||[]; }catch(e){ return []; }
 };
+window.saveIncomeLedger = function(arr){
+  localStorage.setItem('gnsi_income_ledger', JSON.stringify(arr));
+};
+window.saveExpLedger = function(arr){
+  localStorage.setItem('gnsi_exp_ledger', JSON.stringify(arr));
+};
+window.loadCustomCats = function(type){
+  try{ return JSON.parse(localStorage.getItem('gnsi_custom_cats_'+type))||[]; }catch(e){ return []; }
+};
+window.saveCustomCats = function(type, arr){
+  localStorage.setItem('gnsi_custom_cats_'+type, JSON.stringify(arr));
+};
 </script>
-</body>
 </html>
