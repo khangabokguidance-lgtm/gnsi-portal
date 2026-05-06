@@ -10360,7 +10360,8 @@ function gnsiKVPush(key, value) {
   try {
     var _raw = typeof value==='string' ? value : JSON.stringify(value);
     localStorage.setItem(key, _raw);
-    localStorage.setItem('gnsi_kv_ts_'+key, ts);
+    var _tsKey = key.indexOf('gnsi_kv_ts_') === 0 ? key : 'gnsi_kv_ts_'+key;
+    localStorage.setItem(_tsKey, ts);
     parsed = typeof value==='string' ? JSON.parse(value) : value;
   } catch(e) { parsed = value; }
   /* 2. Dedup: skip if value hash unchanged — EGRESS FIX: stronger fingerprint */
@@ -13454,6 +13455,13 @@ var _fseSubTab = _fseSubTab || 'groups';
 var _fseAsnSearch = _fseAsnSearch || '';
 var _fseAsnClsFilter = _fseAsnClsFilter || 'all';
 var _fseAsnEditId = _fseAsnEditId || null; // stuId being edited
+/* shim: loadStuFeeAssignments → delegates to _fmcLoadAsgns */
+if (typeof loadStuFeeAssignments === 'undefined') {
+  window.loadStuFeeAssignments = function() {
+    if (typeof _fmcLoadAsgns === 'function') return _fmcLoadAsgns();
+    try { return JSON.parse(localStorage.getItem('gnsi_fee_asgns') || '[]'); } catch(e) { return []; }
+  };
+}
 function _fmcRenderFeeSetup(isAdmin) {
   var conf = (typeof loadFeeConf==='function') ? loadFeeConf() : {};
   var fgs  = conf.feeGroups || [];
