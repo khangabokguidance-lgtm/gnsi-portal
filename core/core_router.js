@@ -56,6 +56,7 @@ var _PAGE_MAP = null;
 function _getPageMap() {
   if (_PAGE_MAP) return _PAGE_MAP;
   _PAGE_MAP = {
+    managementchecklist: function () { return (typeof renderManagementchecklist === 'function') ? renderManagementchecklist() : '<div>Management Checklist loading...</div>'; },
     /* ── Core ── */
     dashboard:        function () { return (typeof renderDashboard    === 'function') ? renderDashboard()    : '<div>Dashboard loading…</div>'; },
     admincentre:      function () { return (typeof renderAdminCentre  === 'function') ? renderAdminCentre()  : '<div>Admin Centre loading…</div>'; },
