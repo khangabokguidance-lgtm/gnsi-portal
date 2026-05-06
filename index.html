@@ -13985,6 +13985,30 @@ function fseRemoveManualType(idx){
   render();
 }
 /* ── Student Assignment Functions ── */
+// ── Student Fee Assignment Helpers ──────────────────────────────
+function loadStuFeeAssignments() {
+  try { return JSON.parse(localStorage.getItem('gnsi_sfa_assignments')) || []; }
+  catch(e) { return []; }
+}
+function saveStuFeeAssignments(arr) {
+  localStorage.setItem('gnsi_sfa_assignments', JSON.stringify(arr));
+}
+function getStuFeeAssignment(stuId) {
+  var all = loadStuFeeAssignments();
+  var found = all.find(function(a) { return String(a.stuId) === String(stuId); });
+  return found || { feeGroupIds: [], manualFeeTypes: [], note: '' };
+}
+function setStuFeeAssignment(stuId, feeGroupIds, manualFeeTypes, note) {
+  var all = loadStuFeeAssignments();
+  var idx = all.findIndex(function(a) { return String(a.stuId) === String(stuId); });
+  var entry = { stuId: String(stuId), feeGroupIds: feeGroupIds||[], manualFeeTypes: manualFeeTypes||[], note: note||'' };
+  if (idx >= 0) { all[idx] = entry; } else { all.push(entry); }
+  saveStuFeeAssignments(all);
+}
+function deleteStuFeeAssignment(stuId) {
+  var all = loadStuFeeAssignments().filter(function(a) { return String(a.stuId) !== String(stuId); });
+  saveStuFeeAssignments(all);
+}
 function fseSaveStudentAssignment(stuId) {
   var conf = (typeof loadFeeConf==='function') ? loadFeeConf() : {};
   var fgs  = conf.feeGroups || [];
