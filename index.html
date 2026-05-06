@@ -49,6 +49,8 @@
     window._getSb=function(){ return window._supa||null; };
 })();
 </script>
+<script src="patches/error-diagnostics.js"></script>
+<script src="patches/storage-polyfill.js"></script>
 <script src="patches/cloud-proxy.js"></script>
 <script src="patches/performance.js"></script>
 
@@ -55510,13 +55512,10 @@ console.error('[GNSI] suppressed error');
 
   /* Periodic quota check — updates sync panel indicator only (toast warning removed) */
   function _gnsiCheckQuota() {
-    try {
-      var sizeKB = _gnsiLocalStorageSize();
-      var pct    = Math.round(sizeKB / 5120 * 100);
-      /* Update sync panel storage indicator if visible */
-      var el = document.getElementById('gnsi-storage-size');
-      if (el) el.textContent = sizeKB + 'KB / ~5120KB (' + pct + '%)';
-    } catch(e) {}
+    /* Cloud health widget handles its own refresh — nothing to do here */
+    if (typeof window._gnsiCloudHealthRefresh === 'function') {
+      window._gnsiCloudHealthRefresh();
+    }
   }
   window._gnsiCheckQuota = _gnsiCheckQuota;
   setInterval(_gnsiCheckQuota, 5 * 60 * 1000); /* every 5 minutes */
@@ -55550,44 +55549,146 @@ console.error('[GNSI] suppressed error');
      Adds a storage size indicator to the Sync page
   ════════════════════════════════════════════════════════════════════════ */
   (function _injectStoragePanel() {
-    /* Inject a storage usage bar into the sync/settings page */
-    function _buildStorageWidget() {
-      var sizeKB = _gnsiLocalStorageSize();
-      var pct    = Math.min(100, Math.round(sizeKB / 5120 * 100));
-      var color  = pct >= 90 ? '#dc2626' : pct >= 70 ? '#d97706' : '#15803d';
-      var kvCount = 0;
-      try {
-        for (var i = 0; i < localStorage.length; i++) {
-          var k = localStorage.key(i);
-          if (k && (k.startsWith('gnsi_') || k.startsWith('ims_'))) kvCount++;
-        }
-      } catch(e) {}
-      /* ── FIX: always read from the unified in-memory GNSI_OFFLINE_QUEUE array
-         which is the single source of truth loaded from 'gnsi_offline_queue' key ── */
-      var queueLen = (typeof GNSI_OFFLINE_QUEUE !== 'undefined' && Array.isArray(GNSI_OFFLINE_QUEUE))
-        ? GNSI_OFFLINE_QUEUE.length
-        : (function(){ try { return JSON.parse(localStorage.getItem('gnsi_offline_queue')||'[]').length; } catch(e){ return 0; } })();
-      return '<div style="background:var(--surface);border:1.5px solid var(--border);border-radius:12px;padding:16px 18px;margin-bottom:16px">'
-        + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'
-        +   '<span style="font-weight:800;font-size:13px;color:var(--text)">💾 Local Storage Health</span>'
-        +   '<span id="gnsi-storage-size" style="font-size:12px;color:var(--muted)">' + sizeKB + 'KB / ~5120KB (' + pct + '%)</span>'
-        + '</div>'
-        + '<div style="height:10px;background:var(--border);border-radius:5px;overflow:hidden;margin-bottom:10px">'
-        +   '<div style="height:100%;width:' + pct + '%;background:' + color + ';border-radius:5px;transition:width .5s"></div>'
-        + '</div>'
-        + '<div style="display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--muted)">'
-        +   '<span>📦 <b>' + kvCount + '</b> stored keys</span>'
-        +   '<span>⚡ <b>' + queueLen + '</b> queued offline write' + (queueLen !== 1 ? 's' : '') + '</span>'
-        +   (pct >= 70
-              ? '<span style="color:' + color + ';font-weight:700">⚠️ ' + (100 - pct) + '% space left</span>'
-              : '<span style="color:#15803d">✅ Storage healthy</span>')
-        + '</div>'
-        + (queueLen > 0
-            ? '<button onclick="gnsiDrainQueue()" style="margin-top:10px;padding:6px 14px;border-radius:8px;background:#1433a8;color:#fff;border:none;font-size:12px;font-weight:700;cursor:pointer">⬆️ Drain Queue Now (' + queueLen + ')</button>'
-            : '')
+
+  /* ══════════════════════════════════════════════════════════════════
+     CLOUD DATABASE HEALTH WIDGET (replaces Local Storage Health)
+     Shows real Supabase stats: connection, record counts, last sync,
+     offline queue. No 5120KB limit — data lives in the cloud.
+  ══════════════════════════════════════════════════════════════════ */
+
+  /* Cache for cloud stats so widget renders instantly then updates */
+  var _cloudStats = {
+    status      : 'checking',   /* 'connected' | 'error' | 'checking' */
+    kvCount     : null,
+    students    : null,
+    staff       : null,
+    lastSync    : null,
+    error       : null
+  };
+
+  /* Fetch live stats from Supabase — fires async, then re-renders widget */
+  function _fetchCloudStats() {
+    var sb = window._supa || (typeof _getSb === 'function' ? _getSb() : null);
+    if (!sb) {
+      _cloudStats.status = 'error';
+      _cloudStats.error  = 'Supabase not connected';
+      _refreshWidgetEl();
+      return;
+    }
+    _cloudStats.status = 'checking';
+    _refreshWidgetEl();
+
+    var done = 0; var total = 3;
+    function tick() { done++; if (done >= total) { _cloudStats.status = 'connected'; _refreshWidgetEl(); } }
+
+    /* 1. KV row count */
+    sb.from('gnsi_keyvalue').select('key', { count: 'exact', head: true })
+      .then(function(r) {
+        if (r.error) { _cloudStats.status = 'error'; _cloudStats.error = r.error.message||r.error.code||'DB error'; }
+        else _cloudStats.kvCount = r.count;
+        tick();
+      }).catch(function(e) { _cloudStats.status = 'error'; _cloudStats.error = e&&e.message||'Network error'; tick(); });
+
+    /* 2. Students count */
+    sb.from('students').select('id', { count: 'exact', head: true })
+      .then(function(r) { if (!r.error) _cloudStats.students = r.count; tick(); })
+      .catch(function() { tick(); });
+
+    /* 3. Staff count */
+    sb.from('gnsi_staff_biodata').select('staff_id', { count: 'exact', head: true })
+      .then(function(r) { if (!r.error) _cloudStats.staff = r.count; tick(); })
+      .catch(function() { tick(); });
+
+    /* Last sync time from local memory */
+    try { _cloudStats.lastSync = localStorage.getItem('_gnsi_kv_last_pull') || null; } catch(e) {}
+  }
+
+  function _fmtTime(iso) {
+    if (!iso) return 'Never';
+    try {
+      var d = new Date(iso);
+      var now = new Date();
+      var diff = Math.round((now - d) / 1000);
+      if (diff < 60)  return diff + 's ago';
+      if (diff < 3600) return Math.round(diff/60) + 'm ago';
+      if (diff < 86400) return Math.round(diff/3600) + 'h ago';
+      return d.toLocaleDateString();
+    } catch(e) { return iso; }
+  }
+
+  function _buildStorageWidget() {
+    var s = _cloudStats;
+    var isConnected = s.status === 'connected';
+    var isChecking  = s.status === 'checking';
+    var isError     = s.status === 'error';
+
+    var statusColor = isConnected ? '#15803d' : isChecking ? '#d97706' : '#dc2626';
+    var statusIcon  = isConnected ? '🟢' : isChecking ? '🟡' : '🔴';
+    var statusText  = isConnected ? 'Connected' : isChecking ? 'Checking…' : 'Error';
+
+    var queueLen = (typeof GNSI_OFFLINE_QUEUE !== 'undefined' && Array.isArray(GNSI_OFFLINE_QUEUE))
+      ? GNSI_OFFLINE_QUEUE.length
+      : (function(){ try { return JSON.parse(localStorage.getItem('gnsi_offline_queue')||'[]').length; } catch(e){ return 0; } })();
+
+    /* Stat cards */
+    function statCard(icon, label, val, color) {
+      var display = val === null ? (isChecking ? '…' : '—') : val;
+      return '<div style="background:var(--bg,#f8fafc);border:1px solid var(--border);border-radius:8px;padding:10px 14px;min-width:90px;flex:1">'
+        + '<div style="font-size:18px;margin-bottom:2px">' + icon + '</div>'
+        + '<div style="font-size:18px;font-weight:800;color:' + (color||'var(--text)') + '">' + display + '</div>'
+        + '<div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">' + label + '</div>'
         + '</div>';
     }
-    window._gnsiStorageWidget = _buildStorageWidget;
+
+    return '<div id="gnsi-cloud-health-widget" style="background:var(--surface);border:1.5px solid var(--border);border-radius:12px;padding:16px 18px;margin-bottom:16px">'
+
+      /* Header row */
+      + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">'
+      +   '<span style="font-weight:800;font-size:13px;color:var(--text)">☁️ Cloud Database Health</span>'
+      +   '<span style="font-size:12px;color:' + statusColor + ';font-weight:700">' + statusIcon + ' Supabase ' + statusText + '</span>'
+      + '</div>'
+
+      /* Error message */
+      + (isError ? '<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:8px 12px;font-size:12px;color:#dc2626;margin-bottom:10px">⚠️ ' + (s.error||'Connection failed') + '</div>' : '')
+
+      /* Stat cards row */
+      + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">'
+      +   statCard('🗄️', 'KV Records',  s.kvCount,  '#1433a8')
+      +   statCard('🎓', 'Students',    s.students,  '#0369a1')
+      +   statCard('👤', 'Staff',       s.staff,     '#7c3aed')
+      +   statCard('⚡', 'Offline Queue', queueLen,  queueLen > 0 ? '#d97706' : '#15803d')
+      + '</div>'
+
+      /* Footer row */
+      + '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">'
+      +   '<span style="font-size:11px;color:var(--muted)">🕐 Last sync: <b>' + _fmtTime(s.lastSync) + '</b> &nbsp;|&nbsp; No storage limit — data lives in Supabase</span>'
+      +   '<div style="display:flex;gap:6px">'
+      +     (queueLen > 0 ? '<button onclick="gnsiDrainQueue()" style="padding:5px 12px;border-radius:7px;background:#1433a8;color:#fff;border:none;font-size:11px;font-weight:700;cursor:pointer">⬆️ Drain Queue (' + queueLen + ')</button>' : '')
+      +     '<button onclick="window._gnsiCloudHealthRefresh&&window._gnsiCloudHealthRefresh()" style="padding:5px 12px;border-radius:7px;background:var(--border);color:var(--text);border:none;font-size:11px;font-weight:600;cursor:pointer">🔄 Refresh</button>'
+      +   '</div>'
+      + '</div>'
+
+      + '</div>';
+  }
+
+  /* Update the widget DOM element in-place without full page re-render */
+  function _refreshWidgetEl() {
+    var el = document.getElementById('gnsi-cloud-health-widget');
+    if (el && el.parentNode) {
+      var tmp = document.createElement('div');
+      tmp.innerHTML = _buildStorageWidget();
+      el.parentNode.replaceChild(tmp.firstChild, el);
+    }
+  }
+
+  window._gnsiStorageWidget      = _buildStorageWidget;
+  window._gnsiCloudHealthRefresh = function() { _fetchCloudStats(); };
+
+  /* Auto-fetch on first render + every 2 minutes */
+  setTimeout(_fetchCloudStats, 800);
+  setInterval(_fetchCloudStats, 2 * 60 * 1000);
+
+  window._gnsiStorageWidget = _buildStorageWidget;
 
     /* Inject into sync page when it renders */
     (function _patchSyncPage() {
