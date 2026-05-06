@@ -64258,5 +64258,15 @@ document.addEventListener('change', function(e){
 <script src="modules/teaching.js"></script>
 <script src="modules/timetable.js"></script>
 <script src="modules/modules_managementchecklist.js"></script>
+<script src="modules/accounts.js"></script>
+<script>
+// Restore sync versions after accounts.js loads
+window.loadIncomeLedger = function(){
+  try{ return JSON.parse(localStorage.getItem('gnsi_income_ledger'))||[]; }catch(e){ return []; }
+};
+window.loadExpLedger = function(){
+  try{ return JSON.parse(localStorage.getItem('gnsi_exp_ledger'))||[]; }catch(e){ return []; }
+};
+</script>
 </body>
 </html>
