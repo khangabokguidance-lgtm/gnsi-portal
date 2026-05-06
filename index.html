@@ -64280,4 +64280,30 @@ window.saveCustomCats = function(type, arr){
   localStorage.setItem('gnsi_custom_cats_'+type, JSON.stringify(arr));
 };
 </script>
+window.getStuFeeAssignment = function(stuId) {
+  try {
+    var all = JSON.parse(localStorage.getItem('gnsi_fee_asgns')) || [];
+    var found = all.find(function(a){ return String(a.stuId) === String(stuId); });
+    return found || { feeGroupIds: [], manualFeeTypes: [], note: '' };
+  } catch(e) {
+    return { feeGroupIds: [], manualFeeTypes: [], note: '' };
+  }
+};
+
+window.fmcLoadAsgns = function() {
+  try { return JSON.parse(localStorage.getItem('gnsi_fee_asgns')) || []; } catch(e) { return []; }
+};
+
+window.fmcSaveAsgns = function(arr) {
+  localStorage.setItem('gnsi_fee_asgns', JSON.stringify(arr));
+};
+window.FSFEECONFIG = {
+  courses: [
+    { id:'sainik', name:'Sainik', icon:'✂️', admFee:6000, monthlyFees:{ boarder:6000, dayscholar:2500, dayboarder:4000 }},
+    { id:'navodaya', name:'Navodaya', icon:'🎨', admFee:6000, monthlyFees:{ boarder:5500, dayscholar:2000, dayboarder:3500 }},
+    { id:'foundation', name:'Foundation', icon:'🌱', admFee:6000, monthlyFees:{ boarder:5500, dayscholar:2000, dayboarder:3500 }},
+    { id:'combined', name:'Combined', icon:'🔗', admFee:6000, monthlyFees:{ boarder:6500, dayscholar:2500, dayboarder:4500 }}
+  ]
+};
+</script>
 </html>
