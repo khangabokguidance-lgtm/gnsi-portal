@@ -30,6 +30,15 @@
    Real implementations in core/*.js replace these once loaded. */
 (function(){
   var noop = function(){};
+
+  /* ── GNSI In-Memory KV Timestamp Store ──────────────────────────────────
+     Replaces localStorage for gnsi_kv_ts_* keys to avoid QuotaExceededError.
+     These are sync timestamps only — they don't need to survive page refresh.
+  ──────────────────────────────────────────────────────────────────────── */
+  window.__gnsiTsStore = Object.create(null);
+  window.__gnsiTsGet = function(key) { return window.__gnsiTsStore[key] || null; };
+  window.__gnsiTsSet = function(key, val) { window.__gnsiTsStore[key] = val; };
+  window.__gnsiTsDel = function(key) { delete window.__gnsiTsStore[key]; };
   var fns = ['setSyncStatus','showToast','detectRole','canAccess','navigate',
     'render','buildNav','debouncedRender','loadSession','saveSession','clearSession',
     '_getSb','gnsiKVPush','gnsiKVPullAll','loadFromSupabase','initApp','pushToSupabase',
@@ -2031,7 +2040,7 @@ function saveStaffBiodata(d){
 
   _sbdCache=d;
   localStorage.setItem(_sbdKey,JSON.stringify(d));
-  localStorage.setItem('gnsi_kv_ts_'+_sbdKey, new Date().toISOString());
+  window.__gnsiTsSet('gnsi_kv_ts_' + _sbdKey, new Date().toISOString());
   if(typeof gnsiKVPush==='function') gnsiKVPush(_sbdKey, d);
 }
 // Write a single staff biodata record to Supabase
@@ -2946,7 +2955,7 @@ function stuLoadExtra(id){
 }
 function stuSaveExtra(id, obj){
   _stuExtraCache[String(id)] = obj;   // update cache immediately
-  localStorage.setItem('gnsi_stuex_'+id, JSON.stringify(obj));
+  (function(){ if(typeof _stuExtraCache!=='undefined') _stuExtraCache[id]=obj; if(typeof gnsiKVPush==='function') gnsiKVPush('gnsi_stuex_'+id, obj); })();
   if(typeof gnsiKVPush==='function') gnsiKVPush('gnsi_stuex_'+id, obj);
   /* FIX 1 — Student Personal Data Cloud Backup
      Saves all extra fields to gnsi_student_extra Supabase table.
@@ -4313,7 +4322,7 @@ function loadAdmApps(){
 }
 function saveAdmApps(list){
   localStorage.setItem('gnsi_adm_apps', JSON.stringify(list));
-  localStorage.setItem('gnsi_kv_ts_gnsi_adm_apps', new Date().toISOString());
+  window.__gnsiTsSet('gnsi_kv_ts_gnsi_adm_apps', new Date().toISOString());
   if (typeof gnsiKVPush === 'function') gnsiKVPush('gnsi_adm_apps', list);
   // RELIABILITY FIX: also push a compact per-student summary key so
   // each record survives independently even if the full list KV row is lost.
@@ -4501,7 +4510,7 @@ function admQuickAdmit(id){
   if(!confirm('Mark "'+a.name+'" as Admitted?')) return;
   apps = apps.map(function(x){return String(x.id)===String(id)?Object.assign({},x,{status:'Admitted'}):x;});
   localStorage.setItem('gnsi_adm_apps', JSON.stringify(apps));
-  localStorage.setItem('gnsi_kv_ts_gnsi_adm_apps', new Date().toISOString());
+  window.__gnsiTsSet('gnsi_kv_ts_gnsi_adm_apps', new Date().toISOString());
   if(typeof gnsiKVPush==='function') gnsiKVPush('gnsi_adm_apps', apps);
   if(typeof saveAdmApps==='function') saveAdmApps(apps);
   showToast(a.name+' marked as Admitted ✅','#8b5cf6');
@@ -4742,7 +4751,7 @@ function saveAdmApp(editId){
   }
   // Persist immediately and push to cloud
   localStorage.setItem('gnsi_adm_apps', JSON.stringify(list));
-  localStorage.setItem('gnsi_kv_ts_gnsi_adm_apps', new Date().toISOString());
+  window.__gnsiTsSet('gnsi_kv_ts_gnsi_adm_apps', new Date().toISOString());
   if (typeof gnsiKVPush === 'function') gnsiKVPush('gnsi_adm_apps', list);
   saveAdmApps(list);
   /* SYNC BACK: when admission record is linked to a student, update gnsi_stuex_ */
@@ -4801,7 +4810,7 @@ function admDelete(id){
   if(!confirm('Delete admission record for '+label+'? This cannot be undone.'))return;
   var list = loadAdmApps().filter(function(a){return String(a.id)!==String(id);});
   localStorage.setItem('gnsi_adm_apps', JSON.stringify(list));
-  localStorage.setItem('gnsi_kv_ts_gnsi_adm_apps', new Date().toISOString());
+  window.__gnsiTsSet('gnsi_kv_ts_gnsi_adm_apps', new Date().toISOString());
   if (typeof gnsiKVPush === 'function') gnsiKVPush('gnsi_adm_apps', list);
   saveAdmApps(list);
   admViewId=null;
@@ -4988,7 +4997,7 @@ function admEnroll(id){
   if (_supa && typeof pushToSupabase === 'function') pushToSupabase();
   // Persist admission apps
   localStorage.setItem('gnsi_adm_apps', JSON.stringify(apps));
-  localStorage.setItem('gnsi_kv_ts_gnsi_adm_apps', new Date().toISOString());
+  window.__gnsiTsSet('gnsi_kv_ts_gnsi_adm_apps', new Date().toISOString());
   if (typeof gnsiKVPush === 'function') gnsiKVPush('gnsi_adm_apps', apps);
   saveAdmApps(apps);
   admViewId=null;admEditId=null;admFormOpen=false;
@@ -5357,7 +5366,7 @@ function admSaveAdmissionFee(asgnId, admAppId) {
       : x;
   });
   localStorage.setItem('gnsi_adm_apps', JSON.stringify(apps));
-  localStorage.setItem('gnsi_kv_ts_gnsi_adm_apps', new Date().toISOString());
+  window.__gnsiTsSet('gnsi_kv_ts_gnsi_adm_apps', new Date().toISOString());
   if (typeof gnsiKVPush === 'function') gnsiKVPush('gnsi_adm_apps', apps);
   if (typeof saveAdmApps === 'function') saveAdmApps(apps);
 
@@ -5590,7 +5599,7 @@ function admAssignPhase2Course(asgnId, admAppId) {
       : x;
   });
   localStorage.setItem('gnsi_adm_apps', JSON.stringify(apps));
-  localStorage.setItem('gnsi_kv_ts_gnsi_adm_apps', new Date().toISOString());
+  window.__gnsiTsSet('gnsi_kv_ts_gnsi_adm_apps', new Date().toISOString());
   if (typeof gnsiKVPush === 'function') gnsiKVPush('gnsi_adm_apps', apps);
   if (typeof saveAdmApps === 'function') saveAdmApps(apps);
   showToast('✅ Phase II course assigned: ' + subtype, '#854d0e');
@@ -8337,7 +8346,7 @@ function saveDutyAttend(obj){
 
   var _dak = dutyAttendKey();
   localStorage.setItem(_dak, JSON.stringify(obj));
-  localStorage.setItem('gnsi_kv_ts_'+_dak, new Date().toISOString());
+  window.__gnsiTsSet('gnsi_kv_ts_' + _dak, new Date().toISOString());
   if(typeof gnsiKVPush==='function') gnsiKVPush(_dak, obj);
 }
 function dutyAttendToggle(slotKey){
@@ -10417,7 +10426,7 @@ function gnsiKVPushAll(callback) {
     if (raw !== null) {
       var parsed;
       try { parsed = JSON.parse(raw); } catch(e) { parsed = raw; }
-      var ts = localStorage.getItem('gnsi_kv_ts_' + key) || new Date().toISOString();
+      var ts = window.__gnsiTsGet('gnsi_kv_ts_' + key) || new Date().toISOString();
       /* Skip if value unchanged since last push */
       try { var _ph=JSON.stringify(parsed).length+'|'+(typeof parsed==='object'&&parsed?Object.keys(parsed).length:''); if(_gnsiKVLastVal[key]===_ph){skipped++;return;} /* return = continue inside forEach */ _gnsiKVLastVal[key]=_ph; } catch(e) {}
       var _row = { key: key, value: parsed, updated_at: ts };
@@ -10457,14 +10466,14 @@ function gnsiKVPullAll(callback) {
           try {
             // Conflict resolution: only update local if cloud timestamp is newer
             var cloudTs = row.updated_at || '2000-01-01T00:00:00Z';
-            var localTs = localStorage.getItem('gnsi_kv_ts_' + row.key) || '';
+            var localTs = window.__gnsiTsGet('gnsi_kv_ts_' + row.key) || '';
             if (!localTs || cloudTs > localTs) {
               // FIX: Plain strings (gnsi_uname_*, gnsi_pwd_*, gnsi_reset_pin) must NOT
               // be JSON.stringify'd again -- that wraps "john" into '"john"' causing login failures.
               // Arrays/objects still need JSON.stringify for existing consumers.
               var _toStore = typeof row.value === 'string' ? row.value : JSON.stringify(row.value);
               localStorage.setItem(row.key, _toStore);
-              localStorage.setItem('gnsi_kv_ts_' + row.key, cloudTs);
+              window.__gnsiTsSet('gnsi_kv_ts_' + row.key, cloudTs);
               // PERF: invalidate in-memory caches if cloud overwrites these keys
               if (row.key === 'gnsi_hms_student_house') {
                 _houseMapCache = typeof row.value === 'object' ? row.value : null;
@@ -23033,7 +23042,7 @@ function clearMustChangeFlag(staffId){
   var _key = 'gnsi_pwd_must_change_' + staffId;
   localStorage.removeItem(_key);
   /* Remove KV timestamp so a stale cloud value cannot be written back on next pull */
-  localStorage.removeItem('gnsi_kv_ts_' + _key);
+  window.__gnsiTsDel('gnsi_kv_ts_' + _key);
   /* Also clear for admin (PORTAL_USERS) usernames */
   try {
     var _pu = window.PORTAL_USERS || {};
@@ -23293,11 +23302,11 @@ function _gnsiRunPostLoginSync() {
             try {
               var _arr = typeof kv.data.value === 'string' ? JSON.parse(kv.data.value) : kv.data.value;
               if (Array.isArray(_arr) && _arr.length > 0) {
-                var localTs = localStorage.getItem('gnsi_kv_ts_gnsi_adm_apps') || '';
+                var localTs = window.__gnsiTsGet('gnsi_kv_ts_gnsi_adm_apps') || '';
                 var cloudTs = kv.data.updated_at || '';
                 if (!localTs || cloudTs > localTs) {
                   localStorage.setItem('gnsi_adm_apps', JSON.stringify(_arr));
-                  localStorage.setItem('gnsi_kv_ts_gnsi_adm_apps', cloudTs);
+                  window.__gnsiTsSet('gnsi_kv_ts_gnsi_adm_apps', cloudTs);
                 }
               }
             } catch(e) {}
@@ -31029,7 +31038,7 @@ function gnsiOTPPostLogin(staffId, staffName, callback) {
     /* Fallback: use sync hash */
     var hash = _legacyHash(newPwd);
     localStorage.setItem('gnsi_pwd_'+staffId, hash);
-    localStorage.setItem('gnsi_kv_ts_gnsi_pwd_'+staffId, new Date().toISOString());
+    window.__gnsiTsSet('gnsi_kv_ts_gnsi_pwd_'+staffId, new Date().toISOString());
     if (client) {
       client.from('gnsi_staff_credentials')
         .upsert({ staff_id: staffId, pwd_hash: hash, otp_hash: null, otp_expires: null,
@@ -38146,7 +38155,7 @@ try { (function _gnsiSpeedPatch() {
         try {
           var s = typeof row.value === 'string' ? row.value : JSON.stringify(row.value);
           localStorage.setItem(row.key, s);
-          localStorage.setItem('gnsi_kv_ts_' + row.key, row.updated_at);
+          window.__gnsiTsSet('gnsi_kv_ts_' + row.key, row.updated_at);
           // PERF: keep in-memory caches in sync with cloud writes
           if (row.key === 'gnsi_hms_student_house') {
             _houseMapCache = typeof row.value === 'object' ? row.value : null;
@@ -38183,11 +38192,11 @@ try { (function _gnsiSpeedPatch() {
         if (!row.key || row.value === undefined || row.value === null) return;
         try {
           var cloudTs = row.updated_at || '';
-          var localTs = localStorage.getItem('gnsi_kv_ts_' + row.key) || '';
+          var localTs = window.__gnsiTsGet('gnsi_kv_ts_' + row.key) || '';
           if (!localTs || cloudTs > localTs) {
             var s = typeof row.value === 'string' ? row.value : JSON.stringify(row.value);
             localStorage.setItem(row.key, s);
-            localStorage.setItem('gnsi_kv_ts_' + row.key, cloudTs);
+            window.__gnsiTsSet('gnsi_kv_ts_' + row.key, cloudTs);
             // PERF: keep in-memory caches in sync with cloud writes
             if (row.key === 'gnsi_hms_student_house') {
               _houseMapCache = typeof row.value === 'object' ? row.value : null;
@@ -38455,12 +38464,12 @@ try { (function _gnsiSpeedPatch() {
       rows.forEach(function(row) {
         if (!row.key || row.value === undefined || row.value === null) return;
         try {
-          var localTs = localStorage.getItem('gnsi_kv_ts_' + row.key) || '';
+          var localTs = window.__gnsiTsGet('gnsi_kv_ts_' + row.key) || '';
           var cloudTs = row.updated_at || '';
           if (cloudTs <= localTs) return; // local is newer — skip
           var s = typeof row.value === 'string' ? row.value : JSON.stringify(row.value);
           localStorage.setItem(row.key, s);
-          localStorage.setItem('gnsi_kv_ts_' + row.key, cloudTs);
+          window.__gnsiTsSet('gnsi_kv_ts_' + row.key, cloudTs);
           changed.push(row.key);
           // Keep in-memory caches in sync
           try {
@@ -40994,7 +41003,7 @@ var _elibFormOpen = false;
 var _EL_SUBJECTS = ['All','Mathematics','Science','English','Hindi','Social Studies','Computer Science','Sainik Prep','Navodaya Prep','General'];
 var _EL_TYPES    = ['All','Notes','Question Paper','Video Link','Book','Reference','Other'];
 function _elibLoad(){ return _csLoad('gnsi_elibrary', []); }
-function _elibSaveAll(arr){ _csSave('gnsi_elibrary', arr); localStorage.setItem('gnsi_kv_ts_gnsi_elibrary',new Date().toISOString()); if(typeof gnsiKVPush==='function')gnsiKVPush('gnsi_elibrary',arr); }
+function _elibSaveAll(arr){ _csSave('gnsi_elibrary', arr); window.__gnsiTsSet('gnsi_kv_ts_gnsi_elibrary', new Date().toISOString()); if(typeof gnsiKVPush==='function')gnsiKVPush('gnsi_elibrary',arr); }
 function elibOpenForm(){ _elibFormOpen=true; navigate(); }
 function elibCloseForm(){ _elibFormOpen=false; navigate(); }
 function elibAddResource(){
@@ -43909,7 +43918,7 @@ function fs_wizardFinish() {
           source:   'admission_wizard'
         });
         localStorage.setItem('ims_income', JSON.stringify(income));
-        localStorage.setItem('gnsi_kv_ts_ims_income', new Date().toISOString());
+        window.__gnsiTsSet('gnsi_kv_ts_ims_income', new Date().toISOString());
         if (typeof gnsiKVPush === 'function') gnsiKVPush('ims_income', income);
       } catch(e) { console.error('[GNSI] suppressed error'); }
       /* 5. Supabase cloud sync */
@@ -55306,13 +55315,13 @@ console.error('[GNSI] suppressed error');
               try {
                 if (typeof _gnsiIsSensitiveKey === 'function' && _gnsiIsSensitiveKey(row.key) && localStorage.getItem(row.key)) continue;
                 var cloudTs = row.updated_at || '2000-01-01T00:00:00Z';
-                var localTs = localStorage.getItem('gnsi_kv_ts_' + row.key) || '';
+                var localTs = window.__gnsiTsGet('gnsi_kv_ts_' + row.key) || '';
                 if (!localTs || cloudTs > localTs) {
                   var _toStore = typeof row.value === 'string' ? row.value : JSON.stringify(row.value);
                   /* Use native setItem to bypass proxy (FIX 3: no echo) */
                   try {
                     (localStorage.__gnsiNative || localStorage.setItem.bind(localStorage))(row.key, _toStore);
-                    (localStorage.__gnsiNative || localStorage.setItem.bind(localStorage))('gnsi_kv_ts_' + row.key, cloudTs);
+                    window.__gnsiTsSet('gnsi_kv_ts_' + row.key, cloudTs);
                   } catch(e) { _gnsiHandleStorageFull(row.key); }
                   /* Cache invalidation */
                   if (row.key === 'gnsi_hms_student_house') {
@@ -55512,10 +55521,13 @@ console.error('[GNSI] suppressed error');
 
   /* Periodic quota check — updates sync panel indicator only (toast warning removed) */
   function _gnsiCheckQuota() {
-    /* Cloud health widget handles its own refresh — nothing to do here */
-    if (typeof window._gnsiCloudHealthRefresh === 'function') {
-      window._gnsiCloudHealthRefresh();
-    }
+    try {
+      var sizeKB = _gnsiLocalStorageSize();
+      var pct    = Math.round(sizeKB / 5120 * 100);
+      /* Update sync panel storage indicator if visible */
+      var el = document.getElementById('gnsi-storage-size');
+      if (el) el.textContent = sizeKB + 'KB / ~5120KB (' + pct + '%)';
+    } catch(e) {}
   }
   window._gnsiCheckQuota = _gnsiCheckQuota;
   setInterval(_gnsiCheckQuota, 5 * 60 * 1000); /* every 5 minutes */
@@ -55549,146 +55561,44 @@ console.error('[GNSI] suppressed error');
      Adds a storage size indicator to the Sync page
   ════════════════════════════════════════════════════════════════════════ */
   (function _injectStoragePanel() {
-
-  /* ══════════════════════════════════════════════════════════════════
-     CLOUD DATABASE HEALTH WIDGET (replaces Local Storage Health)
-     Shows real Supabase stats: connection, record counts, last sync,
-     offline queue. No 5120KB limit — data lives in the cloud.
-  ══════════════════════════════════════════════════════════════════ */
-
-  /* Cache for cloud stats so widget renders instantly then updates */
-  var _cloudStats = {
-    status      : 'checking',   /* 'connected' | 'error' | 'checking' */
-    kvCount     : null,
-    students    : null,
-    staff       : null,
-    lastSync    : null,
-    error       : null
-  };
-
-  /* Fetch live stats from Supabase — fires async, then re-renders widget */
-  function _fetchCloudStats() {
-    var sb = window._supa || (typeof _getSb === 'function' ? _getSb() : null);
-    if (!sb) {
-      _cloudStats.status = 'error';
-      _cloudStats.error  = 'Supabase not connected';
-      _refreshWidgetEl();
-      return;
-    }
-    _cloudStats.status = 'checking';
-    _refreshWidgetEl();
-
-    var done = 0; var total = 3;
-    function tick() { done++; if (done >= total) { _cloudStats.status = 'connected'; _refreshWidgetEl(); } }
-
-    /* 1. KV row count */
-    sb.from('gnsi_keyvalue').select('key', { count: 'exact', head: true })
-      .then(function(r) {
-        if (r.error) { _cloudStats.status = 'error'; _cloudStats.error = r.error.message||r.error.code||'DB error'; }
-        else _cloudStats.kvCount = r.count;
-        tick();
-      }).catch(function(e) { _cloudStats.status = 'error'; _cloudStats.error = e&&e.message||'Network error'; tick(); });
-
-    /* 2. Students count */
-    sb.from('students').select('id', { count: 'exact', head: true })
-      .then(function(r) { if (!r.error) _cloudStats.students = r.count; tick(); })
-      .catch(function() { tick(); });
-
-    /* 3. Staff count */
-    sb.from('gnsi_staff_biodata').select('staff_id', { count: 'exact', head: true })
-      .then(function(r) { if (!r.error) _cloudStats.staff = r.count; tick(); })
-      .catch(function() { tick(); });
-
-    /* Last sync time from local memory */
-    try { _cloudStats.lastSync = localStorage.getItem('_gnsi_kv_last_pull') || null; } catch(e) {}
-  }
-
-  function _fmtTime(iso) {
-    if (!iso) return 'Never';
-    try {
-      var d = new Date(iso);
-      var now = new Date();
-      var diff = Math.round((now - d) / 1000);
-      if (diff < 60)  return diff + 's ago';
-      if (diff < 3600) return Math.round(diff/60) + 'm ago';
-      if (diff < 86400) return Math.round(diff/3600) + 'h ago';
-      return d.toLocaleDateString();
-    } catch(e) { return iso; }
-  }
-
-  function _buildStorageWidget() {
-    var s = _cloudStats;
-    var isConnected = s.status === 'connected';
-    var isChecking  = s.status === 'checking';
-    var isError     = s.status === 'error';
-
-    var statusColor = isConnected ? '#15803d' : isChecking ? '#d97706' : '#dc2626';
-    var statusIcon  = isConnected ? '🟢' : isChecking ? '🟡' : '🔴';
-    var statusText  = isConnected ? 'Connected' : isChecking ? 'Checking…' : 'Error';
-
-    var queueLen = (typeof GNSI_OFFLINE_QUEUE !== 'undefined' && Array.isArray(GNSI_OFFLINE_QUEUE))
-      ? GNSI_OFFLINE_QUEUE.length
-      : (function(){ try { return JSON.parse(localStorage.getItem('gnsi_offline_queue')||'[]').length; } catch(e){ return 0; } })();
-
-    /* Stat cards */
-    function statCard(icon, label, val, color) {
-      var display = val === null ? (isChecking ? '…' : '—') : val;
-      return '<div style="background:var(--bg,#f8fafc);border:1px solid var(--border);border-radius:8px;padding:10px 14px;min-width:90px;flex:1">'
-        + '<div style="font-size:18px;margin-bottom:2px">' + icon + '</div>'
-        + '<div style="font-size:18px;font-weight:800;color:' + (color||'var(--text)') + '">' + display + '</div>'
-        + '<div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">' + label + '</div>'
+    /* Inject a storage usage bar into the sync/settings page */
+    function _buildStorageWidget() {
+      var sizeKB = _gnsiLocalStorageSize();
+      var pct    = Math.min(100, Math.round(sizeKB / 5120 * 100));
+      var color  = pct >= 90 ? '#dc2626' : pct >= 70 ? '#d97706' : '#15803d';
+      var kvCount = 0;
+      try {
+        for (var i = 0; i < localStorage.length; i++) {
+          var k = localStorage.key(i);
+          if (k && (k.startsWith('gnsi_') || k.startsWith('ims_'))) kvCount++;
+        }
+      } catch(e) {}
+      /* ── FIX: always read from the unified in-memory GNSI_OFFLINE_QUEUE array
+         which is the single source of truth loaded from 'gnsi_offline_queue' key ── */
+      var queueLen = (typeof GNSI_OFFLINE_QUEUE !== 'undefined' && Array.isArray(GNSI_OFFLINE_QUEUE))
+        ? GNSI_OFFLINE_QUEUE.length
+        : (function(){ try { return JSON.parse(localStorage.getItem('gnsi_offline_queue')||'[]').length; } catch(e){ return 0; } })();
+      return '<div style="background:var(--surface);border:1.5px solid var(--border);border-radius:12px;padding:16px 18px;margin-bottom:16px">'
+        + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'
+        +   '<span style="font-weight:800;font-size:13px;color:var(--text)">💾 Local Storage Health</span>'
+        +   '<span id="gnsi-storage-size" style="font-size:12px;color:var(--muted)">' + sizeKB + 'KB / ~5120KB (' + pct + '%)</span>'
+        + '</div>'
+        + '<div style="height:10px;background:var(--border);border-radius:5px;overflow:hidden;margin-bottom:10px">'
+        +   '<div style="height:100%;width:' + pct + '%;background:' + color + ';border-radius:5px;transition:width .5s"></div>'
+        + '</div>'
+        + '<div style="display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--muted)">'
+        +   '<span>📦 <b>' + kvCount + '</b> stored keys</span>'
+        +   '<span>⚡ <b>' + queueLen + '</b> queued offline write' + (queueLen !== 1 ? 's' : '') + '</span>'
+        +   (pct >= 70
+              ? '<span style="color:' + color + ';font-weight:700">⚠️ ' + (100 - pct) + '% space left</span>'
+              : '<span style="color:#15803d">✅ Storage healthy</span>')
+        + '</div>'
+        + (queueLen > 0
+            ? '<button onclick="gnsiDrainQueue()" style="margin-top:10px;padding:6px 14px;border-radius:8px;background:#1433a8;color:#fff;border:none;font-size:12px;font-weight:700;cursor:pointer">⬆️ Drain Queue Now (' + queueLen + ')</button>'
+            : '')
         + '</div>';
     }
-
-    return '<div id="gnsi-cloud-health-widget" style="background:var(--surface);border:1.5px solid var(--border);border-radius:12px;padding:16px 18px;margin-bottom:16px">'
-
-      /* Header row */
-      + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">'
-      +   '<span style="font-weight:800;font-size:13px;color:var(--text)">☁️ Cloud Database Health</span>'
-      +   '<span style="font-size:12px;color:' + statusColor + ';font-weight:700">' + statusIcon + ' Supabase ' + statusText + '</span>'
-      + '</div>'
-
-      /* Error message */
-      + (isError ? '<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:8px 12px;font-size:12px;color:#dc2626;margin-bottom:10px">⚠️ ' + (s.error||'Connection failed') + '</div>' : '')
-
-      /* Stat cards row */
-      + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">'
-      +   statCard('🗄️', 'KV Records',  s.kvCount,  '#1433a8')
-      +   statCard('🎓', 'Students',    s.students,  '#0369a1')
-      +   statCard('👤', 'Staff',       s.staff,     '#7c3aed')
-      +   statCard('⚡', 'Offline Queue', queueLen,  queueLen > 0 ? '#d97706' : '#15803d')
-      + '</div>'
-
-      /* Footer row */
-      + '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">'
-      +   '<span style="font-size:11px;color:var(--muted)">🕐 Last sync: <b>' + _fmtTime(s.lastSync) + '</b> &nbsp;|&nbsp; No storage limit — data lives in Supabase</span>'
-      +   '<div style="display:flex;gap:6px">'
-      +     (queueLen > 0 ? '<button onclick="gnsiDrainQueue()" style="padding:5px 12px;border-radius:7px;background:#1433a8;color:#fff;border:none;font-size:11px;font-weight:700;cursor:pointer">⬆️ Drain Queue (' + queueLen + ')</button>' : '')
-      +     '<button onclick="window._gnsiCloudHealthRefresh&&window._gnsiCloudHealthRefresh()" style="padding:5px 12px;border-radius:7px;background:var(--border);color:var(--text);border:none;font-size:11px;font-weight:600;cursor:pointer">🔄 Refresh</button>'
-      +   '</div>'
-      + '</div>'
-
-      + '</div>';
-  }
-
-  /* Update the widget DOM element in-place without full page re-render */
-  function _refreshWidgetEl() {
-    var el = document.getElementById('gnsi-cloud-health-widget');
-    if (el && el.parentNode) {
-      var tmp = document.createElement('div');
-      tmp.innerHTML = _buildStorageWidget();
-      el.parentNode.replaceChild(tmp.firstChild, el);
-    }
-  }
-
-  window._gnsiStorageWidget      = _buildStorageWidget;
-  window._gnsiCloudHealthRefresh = function() { _fetchCloudStats(); };
-
-  /* Auto-fetch on first render + every 2 minutes */
-  setTimeout(_fetchCloudStats, 800);
-  setInterval(_fetchCloudStats, 2 * 60 * 1000);
-
-  window._gnsiStorageWidget = _buildStorageWidget;
+    window._gnsiStorageWidget = _buildStorageWidget;
 
     /* Inject into sync page when it renders */
     (function _patchSyncPage() {
@@ -59888,7 +59798,7 @@ console.log('[GNSI Course Induction TT v1.0] ✅ Loaded — Admin-only page');
         : x;
     });
     localStorage.setItem('gnsi_adm_apps', JSON.stringify(apps));
-    localStorage.setItem('gnsi_kv_ts_gnsi_adm_apps', new Date().toISOString());
+    window.__gnsiTsSet('gnsi_kv_ts_gnsi_adm_apps', new Date().toISOString());
     if (typeof gnsiKVPush === 'function') gnsiKVPush('gnsi_adm_apps', apps);
     if (typeof saveAdmApps === 'function') saveAdmApps(apps);
 
@@ -61309,7 +61219,7 @@ console.log('[GNSI Course Induction TT v1.0] ✅ Loaded — Admin-only page');
     };
     apps.push(app);
     try { localStorage.setItem('gnsi_adm_apps', JSON.stringify(apps)); } catch(e) {}
-    try { localStorage.setItem('gnsi_kv_ts_gnsi_adm_apps', new Date().toISOString()); } catch(e) {}
+    try { window.__gnsiTsSet('gnsi_kv_ts_gnsi_adm_apps', new Date().toISOString()); } catch(e) {}
     if (typeof gnsiKVPush === 'function') try { gnsiKVPush('gnsi_adm_apps', apps); } catch(e) {}
     if (typeof saveAdmApps === 'function') try { saveAdmApps(apps); } catch(e) {}
     if (typeof showToast === 'function') showToast('🔗 Fee account auto-linked for ' + stu.name, '#1433a8');
