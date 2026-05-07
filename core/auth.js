@@ -71,10 +71,9 @@ function getStoredHash(staffId) {
 }
 
 /* Sets a new password hash for a staff member and pushes to Supabase.
-   mustChange (optional bool):
-     true  → admin-reset / first-login temp password — push must_change='1' to Supabase
-             so ALL devices know to prompt for a password change on next login.
-     false / omitted → user set their own password — push must_change='0'. */
+   mustChange (optional):
+     true  → admin reset / first-login temp password → push must_change='1' to Supabase
+     false / omitted → user set their own password   → push must_change='0' */
 async function setStoredHash(staffId, plainText, mustChange) {
   var _mustChangeVal = mustChange ? '1' : '0';
   var h = await hashPassword(plainText);
@@ -87,16 +86,14 @@ async function setStoredHash(staffId, plainText, mustChange) {
     Object.keys(_pu).forEach(function (uname) {
       if (String(_pu[uname].staffId) === String(staffId)) {
         localStorage.setItem('gnsi_pu_hash_' + uname, h);
-        /* Only clear the must-change marker if the user is setting their OWN password */
         if (!mustChange) localStorage.removeItem('gnsi_pu_must_change_' + uname);
       }
     });
   } catch (e) {}
 
-  /* Only mark as "ever set by the user" if this is NOT an admin-forced temp reset */
   try { if (!mustChange) localStorage.setItem('gnsi_pwd_ever_set_' + staffId, '1'); } catch (e) {}
 
-  /* Push to Supabase gnsi_staff_credentials with the correct must_change value */
+  /* Push to Supabase gnsi_staff_credentials with correct must_change value */
   var client = (typeof _supa !== 'undefined' && _supa) || (typeof _getSb === 'function' && _getSb());
   if (client) {
     var uname = localStorage.getItem('gnsi_uname_' + staffId) || null;
@@ -110,7 +107,7 @@ async function setStoredHash(staffId, plainText, mustChange) {
         staff_id:    staffId,
         uname:       uname,
         pwd_hash:    h,
-        must_change: _mustChangeVal,   /* '1' = force change on next login, '0' = normal */
+        must_change: _mustChangeVal,  /* '1' = force change on next login, '0' = normal */
         role_key:    localStorage.getItem('gnsi_role_' + staffId) || null,
         updated_at:  new Date().toISOString()
       }, { onConflict: 'staff_id' })
@@ -123,23 +120,59 @@ async function setStoredHash(staffId, plainText, mustChange) {
   return h;
 }
 
-/* Verify password for a staff member (handles all hash formats) */
+/* Verify password for a staff member (handles all hash formats).
+   FIX: If localStorage hash doesn't match, falls back to Supabase cloud hash.
+   This prevents "incorrect password" errors when localStorage was overwritten
+   after an admin reset (race condition between setStoredHash and sbPullAllCredentials). */
 async function verifyPassword(staffId, plainText, staffName) {
   var stored = getStoredHash(staffId);
-  if (!stored) { return plainText === defaultPassword(staffName); }
-  if (stored.indexOf('gpv3_') === 0) { return verifyHashPassword(plainText, stored); }
-  /* Old FNV hash — verify and upgrade */
-  if (stored.indexOf('gp_') === 0) {
+
+  /* ── Step 1: Try localStorage hash first ── */
+  var localOk = false;
+  if (!stored) {
+    /* No hash at all — check default password (first ever login) */
+    localOk = (plainText === defaultPassword(staffName));
+  } else if (stored.indexOf('gpv3_') === 0) {
+    localOk = await verifyHashPassword(plainText, stored);
+  } else if (stored.indexOf('gp_') === 0) {
+    /* Old FNV hash — verify and upgrade if correct */
     var ROUNDS = 2000, SALT = 'GNSI·INST·2026·SECURE';
     function _fnv32(s) { var h = 0x811c9dc5; for (var i = 0; i < s.length; i++) { h ^= (s.charCodeAt(i) & 0xff); h = (h >>> 0); h = ((h * 16777619) >>> 0); } return ('00000000' + h.toString(16)).slice(-8); }
     var v = _fnv32(SALT + plainText + SALT + plainText.length.toString(16));
     for (var r = 0; r < ROUNDS; r++) { v = _fnv32(v + plainText + SALT + (r & 0xff).toString(16)); }
-    var gpHash = 'gp_' + v;
-    if (gpHash === stored) { setStoredHash(staffId, plainText); return true; }
-    return false;
+    if (('gp_' + v) === stored) { setStoredHash(staffId, plainText); localOk = true; }
+  } else if (_legacyHash(plainText) === stored) {
+    /* Very old djb2 hash — upgrade if matches */
+    setStoredHash(staffId, plainText);
+    localOk = true;
   }
-  /* Very old djb2 hash — upgrade if matches */
-  if (_legacyHash(plainText) === stored) { setStoredHash(staffId, plainText); return true; }
+
+  if (localOk) return true;
+
+  /* ── Step 2: Fallback — fetch hash directly from Supabase ──────────────
+     Handles the case where localStorage was overwritten with a stale hash
+     after an admin reset the password (sbPullAllCredentials race condition). */
+  try {
+    var _client = (typeof _supa !== 'undefined' && _supa) || (typeof _getSb === 'function' && _getSb());
+    if (_client) {
+      var _res = await _client.from('gnsi_staff_credentials')
+        .select('pwd_hash')
+        .eq('staff_id', staffId)
+        .maybeSingle();
+      if (_res.data && _res.data.pwd_hash && _res.data.pwd_hash !== stored) {
+        var cloudOk = await verifyHashPassword(plainText, _res.data.pwd_hash);
+        if (cloudOk) {
+          /* Restore correct hash to localStorage so future checks work */
+          localStorage.setItem('gnsi_pwd_' + staffId, _res.data.pwd_hash);
+          console.log('[GNSI Auth] verifyPassword: restored correct hash from Supabase for staff', staffId);
+        }
+        return cloudOk;
+      }
+    }
+  } catch (e) {
+    console.warn('[GNSI Auth] verifyPassword Supabase fallback failed:', e);
+  }
+
   return false;
 }
 
