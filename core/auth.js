@@ -70,8 +70,13 @@ function getStoredHash(staffId) {
   return localStorage.getItem('gnsi_pwd_' + staffId) || null;
 }
 
-/* Sets a new password hash for a staff member and pushes to Supabase */
-async function setStoredHash(staffId, plainText) {
+/* Sets a new password hash for a staff member and pushes to Supabase.
+   mustChange (optional bool):
+     true  → admin-reset / first-login temp password — push must_change='1' to Supabase
+             so ALL devices know to prompt for a password change on next login.
+     false / omitted → user set their own password — push must_change='0'. */
+async function setStoredHash(staffId, plainText, mustChange) {
+  var _mustChangeVal = mustChange ? '1' : '0';
   var h = await hashPassword(plainText);
   localStorage.setItem('gnsi_pwd_' + staffId, h);
   localStorage.setItem('gnsi_pwd_changed_' + staffId, '1');
@@ -82,14 +87,16 @@ async function setStoredHash(staffId, plainText) {
     Object.keys(_pu).forEach(function (uname) {
       if (String(_pu[uname].staffId) === String(staffId)) {
         localStorage.setItem('gnsi_pu_hash_' + uname, h);
-        localStorage.removeItem('gnsi_pu_must_change_' + uname);
+        /* Only clear the must-change marker if the user is setting their OWN password */
+        if (!mustChange) localStorage.removeItem('gnsi_pu_must_change_' + uname);
       }
     });
   } catch (e) {}
 
-  try { localStorage.setItem('gnsi_pwd_ever_set_' + staffId, '1'); } catch (e) {}
+  /* Only mark as "ever set by the user" if this is NOT an admin-forced temp reset */
+  try { if (!mustChange) localStorage.setItem('gnsi_pwd_ever_set_' + staffId, '1'); } catch (e) {}
 
-  /* Push to Supabase gnsi_staff_credentials */
+  /* Push to Supabase gnsi_staff_credentials with the correct must_change value */
   var client = (typeof _supa !== 'undefined' && _supa) || (typeof _getSb === 'function' && _getSb());
   if (client) {
     var uname = localStorage.getItem('gnsi_uname_' + staffId) || null;
@@ -103,7 +110,7 @@ async function setStoredHash(staffId, plainText) {
         staff_id:    staffId,
         uname:       uname,
         pwd_hash:    h,
-        must_change: '0',
+        must_change: _mustChangeVal,   /* '1' = force change on next login, '0' = normal */
         role_key:    localStorage.getItem('gnsi_role_' + staffId) || null,
         updated_at:  new Date().toISOString()
       }, { onConflict: 'staff_id' })
