@@ -517,11 +517,20 @@ async function doLogin() {
     var staffMember = null;
     var sr = await _supa.from('staff').select('*').eq('id', row.staff_id).single();
     staffMember = (sr && sr.data) || { id: row.staff_id, name: uname, role: 'Staff', dept: '', status: 'Active' };
-    var sysRole = row.role_key || (typeof detectRole === 'function' ? detectRole(staffMember) : 'staff');
+    /* ── Role assignment with privilege-escalation guard ──────────────────
+       role_key from Supabase is trusted ONLY if it is a valid known role.
+       'admin' is NEVER granted via role_key — only PORTAL_USERS (PATH 1)
+       can be admin. This prevents a corrupted or mis-set role_key in the
+       database from giving a staff member unintended access. */
+    var _rawRole = row.role_key || (typeof detectRole === 'function' ? detectRole(staffMember) : 'staff');
+    var sysRole = (_rawRole && _rawRole !== 'admin' && typeof ROLE_PAGES !== 'undefined' && ROLE_PAGES[_rawRole])
+      ? _rawRole
+      : (typeof detectRole === 'function' ? detectRole(staffMember) : 'staff');
+    if (sysRole === 'admin') sysRole = 'staff'; /* final guard: staff login path never grants admin */
     currentUser = {
       id: staffMember.id, name: staffMember.name,
       role: sysRole, staffRole: staffMember.role,
-      pages: ROLE_PAGES[sysRole] || ROLE_PAGES.staff
+      pages: (typeof ROLE_PAGES !== 'undefined' && ROLE_PAGES[sysRole]) || (typeof ROLE_PAGES !== 'undefined' ? ROLE_PAGES.staff : [])
     };
     if (typeof applyPendingRolePages === 'function') applyPendingRolePages();
     saveSession(currentUser);
