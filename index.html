@@ -1929,7 +1929,8 @@ async function gnsiProvisionCredentials(staffId, username, password, sysRole){
   // 1. Set username
   setUsername(staffId, username);
   // 2. Hash password AND push to Supabase atomically (setStoredHash handles both)
-  await setStoredHash(staffId, password);
+  // FIX: pass mustChange=true so Supabase also records must_change='1' for this first login
+  await setStoredHash(staffId, password, true);
   // 3. Force-change on first login
   setMustChangeFlag(staffId);
   // 4. Store role override (signed)
@@ -23006,7 +23007,10 @@ function _gnsiSignHash(str){
 function getStoredHash(staffId){
   return localStorage.getItem('gnsi_pwd_'+staffId)||null;
 }
-async function setStoredHash(staffId, plainText){
+async function setStoredHash(staffId, plainText, mustChange){
+  /* mustChange=true → push must_change='1' to Supabase (admin temp-password reset).
+     Default (undefined/false) → push must_change='0' (user set their own password). */
+  var _mustChangeVal = mustChange ? '1' : '0';
   var h = await hashPassword(plainText);
   localStorage.setItem('gnsi_pwd_'+staffId, h);
   localStorage.setItem('gnsi_pwd_changed_'+staffId, '1');
@@ -23017,13 +23021,13 @@ async function setStoredHash(staffId, plainText){
     Object.keys(_pu).forEach(function(uname) {
       if (String(_pu[uname].staffId) === String(staffId)) {
         localStorage.setItem('gnsi_pu_hash_' + uname, h);
-        localStorage.removeItem('gnsi_pu_must_change_' + uname);
+        if (!mustChange) localStorage.removeItem('gnsi_pu_must_change_' + uname);
       }
     });
   } catch(e) {}
   /* Permanent marker — survives logout, prevents IIFE from ever re-flagging */
-  try { localStorage.setItem('gnsi_pwd_ever_set_' + staffId, '1'); } catch(e) {}
-  /* ── Push new hash to Supabase with must_change='0' always ── */
+  try { if (!mustChange) localStorage.setItem('gnsi_pwd_ever_set_' + staffId, '1'); } catch(e) {}
+  /* ── Push new hash to Supabase with correct must_change value ── */
   var client = (typeof _getSb === 'function' && _getSb()) || _supa;
   if (client) {
     /* For PORTAL_USERS admin (staff_id=1), gnsi_uname_1 is never set in localStorage
@@ -23043,7 +23047,7 @@ async function setStoredHash(staffId, plainText){
         staff_id:    staffId,
         uname:       uname,
         pwd_hash:    h,
-        must_change: '0',   /* always clear must_change when password is set */
+        must_change: _mustChangeVal,  /* '1' for admin temp-reset, '0' when user sets own password */
         role_key:    roleKey,
         role_sig:    roleSig,
         updated_at:  new Date().toISOString()
@@ -30570,9 +30574,12 @@ function adminResetPwd(staffId,staffName){
     alert('Password cleared. '+staffName+' must set a new password on next login.');
   } else {
     var _pErr3=gnsiCheckPasswordStrength(newPwd.trim());if(_pErr3){alert(_pErr3);return;}
-    setStoredHash(staffId,newPwd.trim()); /* async, fire-and-forget on admin reset */
-  showToast('✅ Password reset for '+staffName+'. They will be prompted to change it on next login.','#16a34a');
+    /* FIX: pass mustChange=true so setStoredHash pushes must_change='1' to Supabase.
+       Previously setStoredHash always pushed must_change='0', which caused Supabase
+       to clear the flag on any other device/reload, making the temp password unverifiable. */
+    setStoredHash(staffId,newPwd.trim(),true); /* async, fire-and-forget on admin reset */
     setMustChangeFlag(staffId);
+    showToast('✅ Password reset for '+staffName+'. They will be prompted to change it on next login.','#16a34a');
     alert('Temporary password set. '+staffName+' will be prompted to change it on next login.');
   }
   if(typeof acLog==='function')acLog('Admin Reset Password','Staff: '+staffName+' (id:'+staffId+')');
