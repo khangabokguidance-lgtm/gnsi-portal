@@ -205,8 +205,10 @@ function buildAdmForm(editId){
     /* Row 4 */
     + '<div><label style="'+labelStyle+'">Status</label>'
     + '<select id="adm-status" style="'+inputStyle+'">'+statusOpts+'</select></div>'
-    + '<div><label style="'+labelStyle+'">Adm No.</label>'
-    + '<input id="adm-admno" value="'+esc(a.admNo||(typeof gnsiGenAdmNo==="function"?gnsiGenAdmNo():admGenNo()))+'" style="'+inputStyle+'"/></div>'
+    + '<div><label style="'+labelStyle+'">GCC No.</label>'
+    + '<input id="adm-gcc" placeholder="e.g. 729" value="'+esc(a.gcc||'')+'" oninput="admAutoFillAdmNo(this.value)" style="'+inputStyle+'"/></div>'
+    + '<div style="grid-column:1/-1"><label style="'+labelStyle+'">Adm No.</label>'
+    + '<input id="adm-admno" value="'+esc(a.admNo||(a.gcc?'GCC-2026-'+a.gcc:(typeof gnsiGenAdmNo==="function"?gnsiGenAdmNo():admGenNo())))+'" style="'+inputStyle+'"/></div>'
     + '</div>';
   /* ── EXTRA DETAILS (collapsible) ── */
   var showExtra = !!(a.dob||a.gender||a.mother||a.whatsapp||a.address||a.prevSchool||a.session||a.category||a.blood);
@@ -301,6 +303,12 @@ function gnsiGenAdmNo() {
   });
   return 'GNSI/' + yr + '/' + String(maxSeq + 1).padStart(3,'0');
 }
+function admAutoFillAdmNo(gccVal) {
+  var el = document.getElementById('adm-admno');
+  if (!el) return;
+  var v = (gccVal || '').toString().trim();
+  el.value = v ? ('GCC-2026-' + v) : '';
+}
 /* ── delegated click handler for ⚡ Auto-No button ── */
 (function(){
   document.addEventListener('click', function(e) {
@@ -370,6 +378,7 @@ function saveAdmApp(editId){
   document.querySelectorAll('input[name="adm-doc"]:checked').forEach(function(el){docs.push(el.value);});
   var obj={
     name:name,
+    gcc:((document.getElementById('adm-gcc')||{}).value||'').trim(),
     admNo:((document.getElementById('adm-admno')||{}).value||'').trim(),
     date:(document.getElementById('adm-date')||{}).value||admDate(),
     dob:(document.getElementById('adm-dob')||{}).value||'',

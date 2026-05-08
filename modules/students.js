@@ -500,9 +500,11 @@ function buildStuForm(editId){
     +'<div class="form-group"><label>Full Name'+R+'</label>'
       +'<input id="nst-name" placeholder="Student full name" value="'+esc(s?s.name:'')+'" autocomplete="off"/></div>'
     +'<div class="form-group"><label>GCC No. / Roll Number'+R+'</label>'
-      +'<input id="nst-roll" placeholder="e.g. 1008" value="'+esc(s?s.roll||'':'')+'" /></div>'
+      +'<input id="nst-roll" placeholder="e.g. 1008" value="'+esc(s?s.roll||'':'')+'" oninput="nstAutoFillAdmNo(this.value)" /></div>'
     +(function(){
-      var _adm = editId ? (ex.admNo||'') : (typeof gnsiGenAdmNo==='function' ? gnsiGenAdmNo() : (ex.admNo||''));
+      var _gccNum = s ? (s.gcc||s.roll||'') : '';
+      var _admFromGcc = _gccNum ? ('GCC-2026-'+_gccNum) : '';
+      var _adm = editId ? (ex.admNo||_admFromGcc||'') : (typeof gnsiGenAdmNo==='function' ? gnsiGenAdmNo() : (ex.admNo||''));
       return '<div class="form-group"><label>Admission No.'+R+'</label>'
         +'<div style="display:flex;gap:6px">'
         +'<input id="nst-admno" placeholder="e.g. GNSI/2026/001" value="'+esc(_adm)+'" style="flex:1;min-width:0"/>'
@@ -726,6 +728,12 @@ function nstClearPhoto(){
   if(msg){ msg.textContent='Photo removed — click Save to confirm.'; msg.style.color='#d4a853'; }
 }
 function stuCancelForm(){ _nstPhotoTemp=null; stuEditId=null; showAddStudent=false; render(); }
+function nstAutoFillAdmNo(gccVal){
+  var el = document.getElementById('nst-admno');
+  if(!el) return;
+  var v = (gccVal||'').toString().trim();
+  el.value = v ? ('GCC-2026-' + v) : '';
+}
 function _gnsiValidatePhone(ph){
   if(!ph||ph.trim()==='') return true;
   var s=ph.trim().replace(/[\s\-\(\)\+]/g,'');
