@@ -292,6 +292,61 @@ body[data-role="accounts"] .gnsi-fee-btn { display: inline-block !important; }
         <button class="ls-btn" id="ls-sign-in-btn" onclick="doLogin()">Sign In &rarr;</button>
       </div>
 
+      <!-- ── Supabase Auth: Email OTP ── -->
+      <div id="ls-auth-divider" style="display:flex;align-items:center;gap:10px;margin:14px 0 12px">
+        <div style="flex:1;height:1px;background:rgba(100,116,192,0.18)"></div>
+        <span style="font-size:10.5px;color:#94a3b8;font-family:'JetBrains Mono',monospace;font-weight:600;letter-spacing:.08em;white-space:nowrap">OR SIGN IN WITH EMAIL</span>
+        <div style="flex:1;height:1px;background:rgba(100,116,192,0.18)"></div>
+      </div>
+
+      <!-- Step 1: Email input -->
+      <div id="ls-auth-email-step">
+        <div class="ls-fld" style="margin-bottom:10px">
+          <label style="font-size:11px;font-weight:700;color:#6474a0;text-transform:uppercase;letter-spacing:.06em">Staff Email</label>
+          <input type="email" id="ls-auth-email" placeholder="your@email.com"
+            autocomplete="email"
+            onkeydown="if(event.key==='Enter')gnsiAuthSendOTP()"
+            style="font-family:'DM Sans',sans-serif"/>
+        </div>
+        <button onclick="gnsiAuthSendOTP()" id="ls-auth-send-btn"
+          style="width:100%;padding:11px;border:1.5px solid #1433a8;border-radius:10px;background:#fff;color:#1433a8;font-family:'DM Sans',sans-serif;font-size:13.5px;font-weight:700;cursor:pointer;transition:all .2s;display:flex;align-items:center;justify-content:center;gap:8px"
+          onmouseover="this.style.background='#f0f4ff'" onmouseout="this.style.background='#fff'">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#1433a8" stroke-width="2.2" stroke-linecap="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m2 7 10 7 10-7"/></svg>
+          Send OTP to Email
+        </button>
+      </div>
+
+      <!-- Step 2: OTP verify (hidden until email sent) -->
+      <div id="ls-auth-otp-step" style="display:none">
+        <div style="text-align:center;margin-bottom:10px">
+          <div style="font-size:12px;color:#16a34a;font-weight:700;font-family:'DM Sans',sans-serif">✅ OTP sent! Check your email.</div>
+          <div id="ls-auth-email-shown" style="font-size:11px;color:#6474a0;font-family:'JetBrains Mono',monospace;margin-top:2px"></div>
+        </div>
+        <div class="ls-fld" style="margin-bottom:10px">
+          <label style="font-size:11px;font-weight:700;color:#6474a0;text-transform:uppercase;letter-spacing:.06em">6-Digit OTP</label>
+          <input type="text" id="ls-auth-otp-input" placeholder="· · · · · ·" maxlength="6"
+            autocomplete="one-time-code" inputmode="numeric" pattern="[0-9]*"
+            onkeydown="if(event.key==='Enter')gnsiAuthVerifyOTP()"
+            style="font-family:'JetBrains Mono',monospace;font-size:22px;letter-spacing:.35em;text-align:center;font-weight:700"/>
+        </div>
+        <button onclick="gnsiAuthVerifyOTP()" id="ls-auth-verify-btn"
+          style="width:100%;padding:11px;border:none;border-radius:10px;background:linear-gradient(135deg,#1433a8,#2655d8);color:#fff;font-family:'DM Sans',sans-serif;font-size:13.5px;font-weight:700;cursor:pointer;transition:opacity .2s">
+          Verify &amp; Sign In
+        </button>
+        <div style="text-align:center;margin-top:8px">
+          <button onclick="gnsiAuthBackToEmail()" style="background:none;border:none;color:#6474a0;font-size:11.5px;font-family:'DM Sans',sans-serif;cursor:pointer;text-decoration:underline;text-underline-offset:2px">
+            ← Use different email
+          </button>
+          &nbsp;·&nbsp;
+          <button onclick="gnsiAuthSendOTP(true)" style="background:none;border:none;color:#1433a8;font-size:11.5px;font-family:'DM Sans',sans-serif;cursor:pointer;text-decoration:underline;text-underline-offset:2px">
+            Resend OTP
+          </button>
+        </div>
+      </div>
+
+      <!-- Auth status message -->
+      <div id="ls-auth-msg" style="display:none;text-align:center;margin-top:8px;font-size:12px;font-family:'DM Sans',sans-serif;font-weight:600;padding:6px 10px;border-radius:7px"></div>
+
       <div id="login-verifying-msg" style="display:none;text-align:center;margin-top:12px;font-size:12.5px;color:#1433a8;font-family:'DM Sans',sans-serif;font-weight:600">
         <span style="display:inline-flex;align-items:center;gap:8px">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" style="animation:gnsi-spin 1s linear infinite;flex-shrink:0"><circle cx="12" cy="12" r="10" stroke="#c7d2fe" stroke-width="3"/><path d="M12 2a10 10 0 0110 10" stroke="#1433a8" stroke-width="3" stroke-linecap="round"/></svg>
@@ -386,6 +441,153 @@ body[data-role="accounts"] .gnsi-fee-btn { display: inline-block !important; }
 
 
 <script>
+/* ══════════════════════════════════════════════════════════
+   SUPABASE AUTH — Email OTP Login
+   ══════════════════════════════════════════════════════════ */
+var _gnsiAuthEmail = '';
+
+function gnsiAuthShowMsg(msg, color) {
+  var el = document.getElementById('ls-auth-msg');
+  if (!el) return;
+  el.textContent = msg;
+  el.style.display = msg ? 'block' : 'none';
+  el.style.color = color || '#1433a8';
+  el.style.background = color === '#dc2626' ? 'rgba(220,38,38,0.08)' : 'rgba(20,51,168,0.07)';
+  el.style.border = '1px solid ' + (color === '#dc2626' ? 'rgba(220,38,38,0.2)' : 'rgba(20,51,168,0.15)');
+}
+
+async function gnsiAuthSendOTP(resend) {
+  var emailEl = document.getElementById('ls-auth-email');
+  var email = (emailEl ? emailEl.value.trim() : _gnsiAuthEmail);
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    gnsiAuthShowMsg('Please enter a valid email address.', '#dc2626'); return;
+  }
+  _gnsiAuthEmail = email;
+  var btn = document.getElementById('ls-auth-send-btn');
+  if (btn) { btn.disabled = true; btn.style.opacity = '.6'; btn.textContent = 'Sending…'; }
+  gnsiAuthShowMsg('', '');
+  try {
+    var client = (typeof _getSb === 'function' && _getSb()) || window._supa;
+    if (!client) throw new Error('Supabase not ready. Please wait and try again.');
+    var r = await client.auth.signInWithOtp({
+      email: email,
+      options: { shouldCreateUser: false }
+    });
+    if (r.error) throw r.error;
+    /* Show OTP step */
+    document.getElementById('ls-auth-email-step').style.display = 'none';
+    document.getElementById('ls-auth-otp-step').style.display = 'block';
+    var shown = document.getElementById('ls-auth-email-shown');
+    if (shown) shown.textContent = email;
+    gnsiAuthShowMsg(resend ? 'New OTP sent!' : '', '#16a34a');
+    setTimeout(function() {
+      var inp = document.getElementById('ls-auth-otp-input');
+      if (inp) inp.focus();
+    }, 80);
+  } catch(e) {
+    gnsiAuthShowMsg(e.message || 'Failed to send OTP.', '#dc2626');
+  } finally {
+    if (btn) {
+      btn.disabled = false; btn.style.opacity = '1';
+      btn.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#1433a8" stroke-width="2.2" stroke-linecap="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m2 7 10 7 10-7"/></svg> Send OTP to Email';
+    }
+  }
+}
+
+async function gnsiAuthVerifyOTP() {
+  var token = (document.getElementById('ls-auth-otp-input') || {}).value || '';
+  token = token.replace(/\s/g, '').trim();
+  if (!token || token.length !== 6 || !/^\d{6}$/.test(token)) {
+    gnsiAuthShowMsg('Enter the 6-digit OTP from your email.', '#dc2626'); return;
+  }
+  var btn = document.getElementById('ls-auth-verify-btn');
+  if (btn) { btn.disabled = true; btn.style.opacity = '.6'; btn.textContent = 'Verifying…'; }
+  gnsiAuthShowMsg('', '');
+  try {
+    var client = (typeof _getSb === 'function' && _getSb()) || window._supa;
+    if (!client) throw new Error('Supabase not ready.');
+    var r = await client.auth.verifyOtp({ email: _gnsiAuthEmail, token: token, type: 'email' });
+    if (r.error) throw r.error;
+    var user = r.data && r.data.user;
+    if (!user || !user.email) throw new Error('No user returned from Supabase.');
+    gnsiAuthShowMsg('✅ Email verified! Signing you in…', '#16a34a');
+    /* Match verified email to a staff member */
+    var matched = null;
+    if (typeof staff !== 'undefined' && staff.length) {
+      matched = staff.find(function(s) {
+        return (s.email || '').toLowerCase() === user.email.toLowerCase();
+      });
+    }
+    /* If staff not in memory yet, try fetching from Supabase */
+    if (!matched) {
+      try {
+        var sr = await client.from('staff').select('*').ilike('email', user.email).limit(1);
+        if (sr.data && sr.data.length) matched = sr.data[0];
+      } catch(fe) {}
+    }
+    if (!matched) {
+      gnsiAuthShowMsg('⚠ No staff account linked to ' + user.email + '. Contact Admin.', '#dc2626');
+      if (btn) { btn.disabled = false; btn.style.opacity = '1'; btn.textContent = 'Verify & Sign In'; }
+      return;
+    }
+    /* Complete login using existing GNSI flow */
+    /* ── Sync credentials from gnsi_staff_credentials to localStorage ──
+       This ensures must_change flag + pwd_hash are available immediately
+       for the force-change-password overlay after email OTP login          */
+    try {
+      var _credSb = (typeof _getSb==='function'&&_getSb())||window._supa;
+      if(_credSb && matched.id){
+        var _cr2 = await _credSb.from('gnsi_staff_credentials')
+          .select('pwd_hash,must_change,uname,role_key')
+          .eq('staff_id', matched.id).maybeSingle();
+        if(_cr2 && _cr2.data){
+          if(_cr2.data.pwd_hash) localStorage.setItem('gnsi_pwd_'+matched.id, _cr2.data.pwd_hash);
+          if(_cr2.data.uname)    localStorage.setItem('gnsi_uname_'+matched.id, _cr2.data.uname);
+          if(_cr2.data.role_key) localStorage.setItem('gnsi_role_'+matched.id, _cr2.data.role_key);
+          if(_cr2.data.must_change==='1')
+            localStorage.setItem('gnsi_pwd_must_change_'+matched.id,'1');
+          else
+            localStorage.removeItem('gnsi_pwd_must_change_'+matched.id);
+        }
+      }
+    } catch(_ce){}
+    if (typeof gnsiCompleteSupabaseLogin === 'function') {
+      gnsiCompleteSupabaseLogin(matched);
+    } else {
+      /* Fallback: build minimal currentUser and hide login screen */
+      var sysRole = (typeof detectRole === 'function') ? detectRole(matched) : 'staff';
+      window.currentUser = {
+        id: matched.id, name: matched.name,
+        role: sysRole, staffRole: matched.role,
+        pages: (window.ROLE_PAGES && (window.ROLE_PAGES[sysRole] || window.ROLE_PAGES.staff)) || []
+      };
+      if (typeof saveSession === 'function') saveSession(window.currentUser);
+      if (typeof hideLoginScreen === 'function') hideLoginScreen();
+      if (typeof initApp === 'function') initApp();
+      if (typeof _gnsiRunPostLoginSync === 'function') _gnsiRunPostLoginSync();
+    }
+  } catch(e) {
+    var msg = e.message || 'Verification failed.';
+    if (msg.toLowerCase().includes('expired') || msg.toLowerCase().includes('invalid')) {
+      msg = 'OTP is invalid or expired. Please request a new one.';
+    }
+    gnsiAuthShowMsg(msg, '#dc2626');
+    if (btn) { btn.disabled = false; btn.style.opacity = '1'; btn.textContent = 'Verify & Sign In'; }
+  }
+}
+
+function gnsiAuthBackToEmail() {
+  document.getElementById('ls-auth-email-step').style.display = 'block';
+  document.getElementById('ls-auth-otp-step').style.display = 'none';
+  var inp = document.getElementById('ls-auth-otp-input');
+  if (inp) inp.value = '';
+  gnsiAuthShowMsg('', '');
+  setTimeout(function() {
+    var em = document.getElementById('ls-auth-email');
+    if (em) em.focus();
+  }, 50);
+}
+
 /* OTP mode toggle */
 var _gnsiOTPMode = false;
 function gnsiToggleOTPMode() {
@@ -23096,8 +23298,28 @@ function clearMustChangeFlag(staffId){
 }
 async function verifyPassword(staffId,plainText,staffName){
   var stored=getStoredHash(staffId);
-  /* No stored hash — check default password (first login) */
-  if(!stored){ return plainText===defaultPassword(staffName); }
+  /* No stored hash — try fetching from Supabase first (covers staff pushed
+     via gnsi-all-staff-setup.html who haven't logged in on this device yet) */
+  if(!stored){
+    try{
+      var _sb=(typeof _getSb==='function'&&_getSb())||window._supa;
+      if(_sb){
+        var _cr=await _sb.from('gnsi_staff_credentials')
+          .select('pwd_hash,must_change').eq('staff_id',staffId).maybeSingle();
+        if(_cr&&_cr.data&&_cr.data.pwd_hash){
+          /* Cache it locally so subsequent logins are instant */
+          localStorage.setItem('gnsi_pwd_'+staffId,_cr.data.pwd_hash);
+          if(_cr.data.must_change==='1')
+            localStorage.setItem('gnsi_pwd_must_change_'+staffId,'1');
+          stored=_cr.data.pwd_hash;
+        }
+      }
+    }catch(_e){}
+    /* Still nothing — accept default (first name) or admin temp password */
+    if(!stored){
+      return plainText===defaultPassword(staffName)||plainText==='Gnsi@2026';
+    }
+  }
   /* New PBKDF2 hash — async verify */
   if(stored.indexOf('gpv3_')===0){ return verifyHashPassword(plainText,stored); }
   /* Old FNV hash (gp_) — verify sync, then silently upgrade to PBKDF2 */
@@ -23139,13 +23361,44 @@ function deleteUsername(staffId){
   if(typeof gnsiKVPush==='function') gnsiKVPush(_key, '');
 }
 function findStaffByUsername(username){
-  // Returns staff member whose assigned username matches
+  // Returns staff member whose assigned username matches (localStorage)
   var uname=(username||'').trim().toLowerCase();
   if(!uname)return null;
   return staff.find(function(s){
     var stored=getUsername(s.id);
     return stored===uname;
   })||null;
+}
+/* findStaffByUsernameCloud — async, falls back to Supabase on fresh devices.
+   On first login, localStorage has no gnsi_uname_* keys. This function
+   queries gnsi_staff_credentials by uname, caches the result locally,
+   then returns the matching staff member so login can proceed. */
+async function findStaffByUsernameCloud(username){
+  var uname=(username||'').trim().toLowerCase();
+  if(!uname) return null;
+  /* 1. Try localStorage first (fast path) */
+  var local=findStaffByUsername(uname);
+  if(local) return local;
+  /* 2. Fresh device — query Supabase by uname */
+  try{
+    var client=(typeof _getSb==='function'&&_getSb())||window._supa;
+    if(!client) return null;
+    var r=await client.from('gnsi_staff_credentials')
+      .select('staff_id,uname,pwd_hash,must_change,role_key')
+      .eq('uname',uname)
+      .maybeSingle();
+    if(r.error||!r.data) return null;
+    var row=r.data;
+    /* Cache locally so next login is instant */
+    if(row.pwd_hash)  localStorage.setItem('gnsi_pwd_'+row.staff_id, row.pwd_hash);
+    if(row.uname)     localStorage.setItem('gnsi_uname_'+row.staff_id, row.uname);
+    if(row.role_key)  localStorage.setItem('gnsi_role_'+row.staff_id, row.role_key);
+    if(row.must_change==='1')
+      localStorage.setItem('gnsi_pwd_must_change_'+row.staff_id,'1');
+    else
+      localStorage.removeItem('gnsi_pwd_must_change_'+row.staff_id);
+    return staff.find(function(s){ return String(s.id)===String(row.staff_id); })||null;
+  }catch(e){ return null; }
 }
 var _loginFailCount = 0;
 var _LOCKOUT_MAX_FAILS = 5;
@@ -62275,11 +62528,30 @@ console.log('[GNSI Course Induction TT v1.0] ✅ Loaded — Admin-only page');
       var pass   = ((document.getElementById('login-pass')     || {}).value || '');
       if (!uname || !pass) { await _origDoLogin(); return; } /* let original show errors */
 
-      /* Show the wait overlay — sbPullAllCredentials no longer used, just show spinner */
+      /* Show the wait overlay */
       _showLoginWait('Verifying credentials…');
       _updateLoginWait('Signing in…', 30);
 
-      /* Call our async doLogin and await it */
+      /* ── FRESH DEVICE FIX ──────────────────────────────────────────────────
+         On a device that has never logged in, localStorage has no gnsi_uname_*
+         or gnsi_pwd_* keys. findStaffByUsername() returns null and the original
+         doLogin reports "wrong password" before even checking Supabase.
+
+         We pre-fetch the credential row from gnsi_staff_credentials by uname
+         and cache it into localStorage BEFORE calling _origDoLogin, so the
+         original lookup finds everything it needs on every device.
+      ────────────────────────────────────────────────────────────────────── */
+      try {
+        /* Only run the cloud pre-fetch if this uname isn't already in localStorage */
+        var alreadyCached = !!findStaffByUsername(uname);
+        if (!alreadyCached && typeof findStaffByUsernameCloud === 'function') {
+          _updateLoginWait('Fetching credentials…', 20);
+          await findStaffByUsernameCloud(uname); /* caches pwd_hash + uname + role into localStorage */
+          _updateLoginWait('Signing in…', 50);
+        }
+      } catch(e) { /* non-fatal — let _origDoLogin handle the error */ }
+
+      /* Call the original doLogin — localStorage is now populated */
       try {
         await _origDoLogin.apply(this, arguments);
       } catch(e) {
