@@ -12959,6 +12959,7 @@ function gnsiDeleteFMCAsgn(id){
   if(!confirm('Remove this student from the fee assignment system? Payment records will be kept.')) return;
   var asgns=_fmcLoadAsgns().filter(function(a){return String(a.id)!==String(id);});
   _fmcSaveAsgns(asgns);
+  if(typeof gnsiMarkLocalSave==='function') gnsiMarkLocalSave(20000);
   if(typeof showToast==='function') showToast('Student removed','#c0291d');
   render();
 }
