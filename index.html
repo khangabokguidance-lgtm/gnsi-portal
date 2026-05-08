@@ -12959,7 +12959,12 @@ function gnsiDeleteFMCAsgn(id){
   if(!confirm('Remove this student from the fee assignment system? Payment records will be kept.')) return;
   var asgns=_fmcLoadAsgns().filter(function(a){return String(a.id)!==String(id);});
   _fmcSaveAsgns(asgns);
-  if(typeof gnsiMarkLocalSave==='function') gnsiMarkLocalSave(20000);
+  /* Guard: block KV pull from restoring the deleted record for 30s */
+  if(typeof gnsiMarkLocalSave==='function') gnsiMarkLocalSave(30000);
+  var _futureTs=new Date(Date.now()+30000).toISOString();
+  try{localStorage.setItem('gnsi_kv_ts_gnsi_fee_asgns',_futureTs);}catch(e){}
+  try{localStorage.setItem('gnsi_kv_ts_gnsi_sfa_assignments',_futureTs);}catch(e){}
+  try{localStorage.setItem('gnsi_kv_bulk_ts',_futureTs);}catch(e){}
   if(typeof showToast==='function') showToast('Student removed','#c0291d');
   render();
 }
