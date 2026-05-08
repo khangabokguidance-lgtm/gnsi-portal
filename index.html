@@ -23511,7 +23511,7 @@ function _gnsiRunPostLoginSync() {
           → hammers the network, freezes UI on mobile connections.
      NEW:
        Wave 0 (0ms)   — render immediately from localStorage (instant UI)
-       Wave 1 (100ms) — core tables only: staff, students, notices (3 queries)
+       Wave 1 (300ms) — core tables only: staff, students, notices (3 queries)
        Wave 2 (1500ms)— KV pull + credentials (background, non-blocking)
        Wave 3 (4000ms)— Finance init (11 queries) + realtime channels
                         only after core UI is stable
@@ -23531,7 +23531,7 @@ function _gnsiRunPostLoginSync() {
     setTimeout(function(){ if(typeof gnsiDrainQueue==='function') gnsiDrainQueue(); }, 300);
     return;
   }
-  // ── Wave 1 (100ms): core tables ───────────────────────────────
+  // ── Wave 1 (400ms): core tables ───────────────────────────────
   setTimeout(function() {
     Promise.all([
       _supa.from('staff').select('id, name, role, dept, status, phone, email').order('id'),
@@ -23615,7 +23615,7 @@ function _gnsiRunPostLoginSync() {
       console.error('[GNSI] suppressed error');
     });
   }, 100);
-  // ── Wave 2 (3000ms): KV + credentials (background, non-blocking) ──
+  // ── Wave 2 (5000ms): KV + credentials (background, non-blocking) ──
   setTimeout(function() {
     // KV pull: reads localStorage timestamps and only updates stale keys
     if (typeof gnsiKVPullAll === 'function') {
@@ -23631,7 +23631,7 @@ function _gnsiRunPostLoginSync() {
       });
     }
     // Credentials are now read directly from Supabase on login — no background pull needed
-  }, 3000);
+  }, 5000);
   // ── Wave 3 (4000ms): Finance + realtime channels ──────────────
   // Finance = 11 queries; only matters when user visits Fees/Accounts
   // Realtime = 4 WebSocket channels; start after network is settled
@@ -23642,13 +23642,13 @@ function _gnsiRunPostLoginSync() {
     // Initial KV push: only push if we have local changes the cloud may not have
     // Uses _gnsiKVInitDone guard internally so it only runs once
     if (typeof gnsiInitialKVPush === 'function') gnsiInitialKVPush(function() {});
-  }, 4000);
-  // ── Wave 4 (8000ms): Auto cloud backup ────────────────────────
+  }, 8000);
+  // ── Wave 4 (15000ms): Auto cloud backup ────────────────────────
   // Runs silently 8 seconds after login. Only fires if >23hrs since
   // last backup. Admin/manager only. Zero egress — DB insert only.
   setTimeout(function() {
     if (typeof gnsiAutoBackupToCloud === 'function') gnsiAutoBackupToCloud(false);
-  }, 8000);
+  }, 15000);
 }
 function gnsiRestoreSupabaseSession(callback) {
   if (!_supa) { if (typeof callback === 'function') callback(false); return; }
@@ -24276,7 +24276,7 @@ function gnsiRebuildExamResults() {
 }
 loadExamData();
 // Rebuild Parent Portal results from existing data on every portal load
-setTimeout(function(){ if(typeof gnsiRebuildExamResults==='function') gnsiRebuildExamResults(); }, 1500);
+setTimeout(function(){ if((navigator.hardwareConcurrency||4)>2&&typeof gnsiRebuildExamResults==='function') gnsiRebuildExamResults(); }, 3000);
 function getGrade(pct){
   var gc=loadGradeConfig();
   gc.sort(function(a,b){return b.minPct-a.minPct;});
@@ -32535,7 +32535,7 @@ document.addEventListener('click', function(e){
   btn.appendChild(ripple);
   ripple.addEventListener('animationend', function(){ ripple.remove(); });
 }, true);
-function gnsiAnimateCounters(){
+function gnsiAnimateCounters(){if((navigator.hardwareConcurrency||4)<=2)return;
   document.querySelectorAll('.stat-val').forEach(function(el){
     var text = el.textContent.trim();
     var num = parseFloat(text.replace(/[^0-9.]/g,''));
@@ -38719,7 +38719,7 @@ try { (function _gnsiSpeedPatch() {
   //  Also pulls immediately when the tab becomes visible again (user alt-tabs
   //  back, phone wakes, etc.) so data is always fresh on return.
   // --------------------------------------------------------------------------
-  var GNSI_AUTO_POLL_MS = 30000;   // 30 s between silent pulls
+  var GNSI_AUTO_POLL_MS = 60000;   // 60 s between silent pulls (perf: was 30s)
   var _gnsiAutoPollTimer = null;
   var _gnsiLastAutoPull  = 0;
   var _gnsiAutoPollActive = false;
@@ -57864,8 +57864,9 @@ console.error('[GNSI] suppressed error');
     resize();
     window.addEventListener('resize', resize);
 
-    /* Create 40 gentle floating particles */
-    for (var i = 0; i < 40; i++) {
+    /* Reduce particles on low-end CPUs (<=2 cores) */
+    var _particleCount = (navigator.hardwareConcurrency||4) <= 2 ? 0 : 20;
+    for (var i = 0; i < _particleCount; i++) {
       particles.push({
         x: Math.random() * canvas.width,
         y: Math.random() * canvas.height,
