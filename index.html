@@ -340,6 +340,138 @@ function maskPhone(ph){
 }
 var GNSI_SUPABASE_URL  = 'https://pwrldrngqxbvwfztxxrd.supabase.co';
 var GNSI_SUPABASE_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB3cmxkcm5ncXhidndmenR4eHJkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ1MTc5NTUsImV4cCI6MjA5MDA5Mzk1NX0.vQi6N4s5Y_iwU1eIi4g8q_T8bW4j8mBH7BFDamAhB0Y';
+
+/* ══════════════════════════════════════════════════════════════════
+   SUPABASE COURSE FEES — Load & Save
+   Table: course_fees (course_id, course_name, subtype, monthly_fee, admission_fee)
+   ══════════════════════════════════════════════════════════════════ */
+function gnsiLoadFeesFromSupabase(callback) {
+  var url = GNSI_SUPABASE_URL + '/rest/v1/course_fees?select=*&order=course_id,subtype';
+  fetch(url, {
+    headers: { 'apikey': GNSI_SUPABASE_KEY, 'Authorization': 'Bearer ' + GNSI_SUPABASE_KEY, 'Content-Type': 'application/json' }
+  }).then(function(res){ return res.json(); }).then(function(rows){
+    if(!Array.isArray(rows)||!rows.length){ if(typeof callback==='function') callback(false,'No data'); return; }
+    if(typeof GNSI_COURSES!=='undefined'){
+      GNSI_COURSES.forEach(function(gc){
+        gc.subTypes.forEach(function(st){
+          var subtype=st.id.replace(gc.id+'_','');
+          var row=rows.find(function(r){ return r.course_id===gc.id&&r.subtype===subtype; });
+          if(row) st.monthlyFee=row.monthly_fee||0;
+        });
+      });
+    }
+    if(typeof FS_FEE_CONFIG!=='undefined'&&FS_FEE_CONFIG.courses){
+      FS_FEE_CONFIG.courses.forEach(function(c){
+        if(!c.monthlyFees) c.monthlyFees={};
+        ['boarder','dayscholar','dayboarder'].forEach(function(st){
+          var row=rows.find(function(r){ return r.course_id===c.id&&r.subtype===st; });
+          if(row){ c.monthlyFees[st]=row.monthly_fee||0; if(st==='boarder') c.admFee=row.admission_fee||0; }
+        });
+      });
+    }
+    try {
+      if(typeof loadFeeConf==='function'&&typeof saveFeeConf==='function'){
+        var _mc=loadFeeConf();
+        rows.forEach(function(row){
+          (_mc.monthlyFees||[]).forEach(function(mf){
+            var cn=(mf.course||'').toLowerCase();
+            if(cn.indexOf(row.course_id)!==-1){
+              if(row.subtype==='boarder')    mf.amount=row.monthly_fee||0;
+              if(row.subtype==='dayscholar') mf.hostelAmount=row.monthly_fee||0;
+            }
+          });
+        });
+        saveFeeConf(_mc);
+      }
+    } catch(e){}
+    if(typeof callback==='function') callback(true,rows);
+  }).catch(function(err){ console.warn('GNSI: Supabase fee load failed',err); if(typeof callback==='function') callback(false,err); });
+}
+function gnsiSaveAllFeesToSupabase(feesArray, callback) {
+  var url = GNSI_SUPABASE_URL + '/rest/v1/course_fees';
+  fetch(url, {
+    method: 'POST',
+    headers: { 'apikey': GNSI_SUPABASE_KEY, 'Authorization': 'Bearer ' + GNSI_SUPABASE_KEY, 'Content-Type': 'application/json', 'Prefer': 'resolution=merge-duplicates' },
+    body: JSON.stringify(feesArray)
+  }).then(function(res){ if(typeof callback==='function') callback(res.ok); })
+  .catch(function(err){ console.warn('GNSI: Supabase bulk fee save failed',err); if(typeof callback==='function') callback(false); });
+}
+function renderAdminFeeManager() {
+  var isAdm=currentUser&&(currentUser.role==='admin'||currentUser.role==='manager');
+  if(!isAdm) return '<div style="padding:20px;color:var(--muted);text-align:center">🔒 Admin access required to manage fees.</div>';
+  var courses=(typeof GNSI_COURSES!=='undefined')?GNSI_COURSES:[];
+  var subtypes=[{key:'boarder',label:'Boarder',icon:'🏠',color:'#1a6b55'},{key:'dayscholar',label:'Day Scholar',icon:'🚌',color:'#1433a8'},{key:'dayboarder',label:'Day Boarder',icon:'🔄',color:'#7c3aed'}];
+  var rows=courses.map(function(c,ci){
+    var stCells=subtypes.map(function(st){
+      var currentFee=0;
+      var stObj=c.subTypes?c.subTypes.find(function(s){ return s.id===c.id+'_'+st.key; }):null;
+      if(stObj) currentFee=stObj.monthlyFee||0;
+      return '<td style="padding:8px"><div style="font-size:10px;color:'+st.color+';font-weight:700;margin-bottom:3px">'+st.icon+' '+st.label+'</div>'
+        +'<input id="adm-fee-'+ci+'-'+st.key+'" type="number" min="0" value="'+currentFee+'" style="width:100%;padding:7px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-weight:600;text-align:right" placeholder="0" oninput="gnsiAdminFeePreview('+ci+',\''+st.key+'\',this.value,\''+st.color+'\')">'
+        +'<div id="adm-prev-'+ci+'-'+st.key+'" style="margin-top:3px;min-height:18px;text-align:right"></div></td>';
+    }).join('');
+    var admFee=0;
+    if(typeof FS_FEE_CONFIG!=='undefined'&&FS_FEE_CONFIG.courses){ var fsc=FS_FEE_CONFIG.courses.find(function(x){ return x.id===c.id; }); if(fsc) admFee=fsc.admFee||0; }
+    return '<tr style="border-bottom:1px solid var(--border)"><td style="padding:10px 8px;font-weight:800;font-size:14px;white-space:nowrap">'+(c.icon||'📚')+' '+c.name+'</td>'+stCells
+      +'<td style="padding:8px"><div style="font-size:10px;color:#d97706;font-weight:700;margin-bottom:3px">🎫 Admission</div>'
+      +'<input id="adm-fee-adm-'+ci+'" type="number" min="0" value="'+admFee+'" style="width:100%;padding:7px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-weight:600;text-align:right" placeholder="0"></td></tr>';
+  }).join('');
+  return '<div class="card" id="admin-fee-manager-card">'
+    +'<div class="card-head"><span class="card-title">💰 Fee Manager <span style="font-size:11px;background:#dcfce7;color:#16a34a;border-radius:20px;padding:2px 10px;font-weight:700;margin-left:8px">☁️ Supabase Cloud</span></span>'
+    +'<div style="display:flex;gap:8px"><button onclick="gnsiAdminRefreshFees()" class="btn btn-outline" style="font-size:12px">🔄 Refresh from Cloud</button>'
+    +'<button onclick="gnsiAdminSaveAllFees()" class="btn btn-primary" style="font-size:12px">☁️ Save All to Cloud</button></div></div>'
+    +'<div style="padding:16px;overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:600px">'
+    +'<thead><tr style="background:var(--surface-alt,#f8fafc)"><th style="padding:10px 8px;text-align:left;font-size:12px;color:var(--muted)">COURSE</th>'
+    +'<th style="padding:10px 8px;text-align:left;font-size:12px;color:var(--muted)">BOARDER (₹/mo)</th>'
+    +'<th style="padding:10px 8px;text-align:left;font-size:12px;color:var(--muted)">DAY SCHOLAR (₹/mo)</th>'
+    +'<th style="padding:10px 8px;text-align:left;font-size:12px;color:var(--muted)">DAY BOARDER (₹/mo)</th>'
+    +'<th style="padding:10px 8px;text-align:left;font-size:12px;color:var(--muted)">ADMISSION (₹)</th></tr></thead>'
+    +'<tbody>'+rows+'</tbody></table></div>'
+    +'<div id="adm-fee-status" style="padding:12px 16px;font-size:13px;color:var(--muted);text-align:right">Last synced from Supabase on load.</div></div>';
+}
+function gnsiAdminFeePreview(ci,st,val,color){
+  var n=parseInt(val,10); var el=document.getElementById('adm-prev-'+ci+'-'+st); if(!el) return;
+  if(isNaN(n)||n<0){el.innerHTML='';return;}
+  el.innerHTML='<span style="display:inline-block;padding:1px 8px;border-radius:20px;font-size:11px;font-weight:700;background:'+color+'15;color:'+color+';border:1px solid '+color+'33">₹'+n.toLocaleString('en-IN')+'/mo</span>';
+}
+function gnsiAdminRefreshFees(){
+  var statusEl=document.getElementById('adm-fee-status');
+  if(statusEl) statusEl.innerHTML='⏳ Loading from Supabase…';
+  gnsiLoadFeesFromSupabase(function(ok){
+    if(ok){ if(typeof showToast==='function') showToast('✅ Fees refreshed from Supabase!','#15803d'); if(typeof render==='function') render(); }
+    else { if(typeof showToast==='function') showToast('❌ Failed to load from Supabase','#dc2626'); if(statusEl) statusEl.innerHTML='❌ Failed to load from cloud.'; }
+  });
+}
+function gnsiAdminSaveAllFees(){
+  var courses=(typeof GNSI_COURSES!=='undefined')?GNSI_COURSES:[];
+  var subtypes=['boarder','dayscholar','dayboarder'];
+  var feesArray=[]; var allOk=true;
+  courses.forEach(function(c,ci){
+    var admEl=document.getElementById('adm-fee-adm-'+ci);
+    var admFee=admEl?(parseInt(admEl.value,10)||0):0;
+    subtypes.forEach(function(st){
+      var el=document.getElementById('adm-fee-'+ci+'-'+st); if(!el) return;
+      var val=parseInt(el.value,10); if(isNaN(val)||val<0){allOk=false;return;}
+      feesArray.push({course_id:c.id,course_name:c.name,subtype:st,monthly_fee:val,admission_fee:admFee,updated_at:new Date().toISOString()});
+    });
+  });
+  if(!allOk){if(typeof showToast==='function') showToast('⚠️ Some values are invalid','#dc2626');return;}
+  var statusEl=document.getElementById('adm-fee-status');
+  if(statusEl) statusEl.innerHTML='⏳ Saving to Supabase…';
+  if(typeof showToast==='function') showToast('⏳ Saving fees to cloud…','#2563eb');
+  gnsiSaveAllFeesToSupabase(feesArray,function(ok){
+    if(ok){
+      try{if(typeof fmcSaveFeeStructure==='function') fmcSaveFeeStructure();}catch(e){}
+      var now=new Date().toLocaleString('en-IN');
+      if(statusEl) statusEl.innerHTML='✅ Saved to Supabase at '+now;
+      if(typeof showToast==='function') showToast('✅ All fees saved to Supabase cloud!','#15803d');
+      if(typeof render==='function') render();
+    } else {
+      if(statusEl) statusEl.innerHTML='❌ Save failed. Check connection.';
+      if(typeof showToast==='function') showToast('❌ Failed to save to Supabase','#dc2626');
+    }
+  });
+}
 /* SECURITY PATCH v3: RLS enforcement check.
    The anon key above is intentionally visible — Supabase anon keys are
    designed to be public. Protection comes entirely from Row Level Security (RLS).
@@ -546,6 +678,10 @@ async function gnsiFinanceInit() {
         if(typeof render==='function'&&typeof activePage!=='undefined'&&activePage==='dashboard') render();
       });
     }
+    /* ── AUTO-LOAD course fees from Supabase course_fees table ── */
+    setTimeout(function(){
+      gnsiLoadFeesFromSupabase(function(ok){ if(ok&&typeof render==='function') render(); });
+    }, 500);
   } catch(e) {
     (void 0);
     _fallbackToLocalStorage();
@@ -16515,7 +16651,7 @@ function renderUnifiedFeeHub() {
   if (activeTab === 'dues')    html += _fmcRenderDues();
   if (activeTab === 'receipts')html += _fmcRenderReceipts(isAccounts);
   if (activeTab === 'students')html += _fmcRenderAssignment(isAccounts, isAccounts);
-  if (activeTab === 'feesetup')html += '<div>' + _fmcRenderFeeSetup(isAccounts) + _fmcRenderClassBridge(isAccounts) + '</div>';
+  if (activeTab === 'feesetup')html += '<div>' + (currentUser&&(currentUser.role==='admin'||currentUser.role==='manager') ? renderAdminFeeManager() + '<div style="margin-top:18px"></div>' : '') + _fmcRenderFeeSetup(isAccounts) + _fmcRenderClassBridge(isAccounts) + '</div>';
   if (activeTab === 'bridge')  html += _fmcRenderClassBridge(isAccounts);
   if (activeTab === 'config')  html += _fmcRenderConfig();
   if (activeTab === 'online')  html += _fmcRenderOnline(isAccounts, pc);
